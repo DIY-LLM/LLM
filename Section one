@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Markov Text Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #FFFFE0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #FFFFFF;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #FFD700;
+            border-bottom: 2px solid #FFD700;
+            padding-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #FFD700;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #FFA500;
+        }
+        #matrix-output {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #FFFACD;
+            border: 1px solid #FFD700;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        #llm-output {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px dashed #FFD700;
+            border-radius: 4px;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Simple Markov Text Generator</h1>
+    <p>Upload a set of text to build a conceptual Transition Matrix for a simple Language Model.</p>
+
+    <section>
+        <h2>Input Dataset</h2>
+        <textarea id="text-input" placeholder="Paste your text data here (e.g., a few paragraphs or sentences)..."></textarea>
+        <button onclick="buildMatrix()">1. Build & Visualize Matrix</button>
+    </section>
+
+    <hr>
+
+    <section>
+        <h2>Transition Matrix (Conceptual)</h2>
+        <p>This shows the probability weights of one word following another (1st-order Markov Chain).</p>
+        <div id="matrix-output">
+            <em>Matrix will appear here after clicking \"Build & Visualize Matrix\".</em>
+            <br>
+            <strong>Most Frequent/Starting Word:</strong> <span id="start-word">N/A</span>
+        </div>
+        <button id="generate-button" onclick="generateText()" disabled>2. Generate LLM Output (Go!)</button>
+    </section>
+
+    <hr>
+
+    <section>
+        <h2>Generated LLM Output</h2>
+        <div id="llm-output">
+            <em>Generated text will appear here after clicking \"Generate LLM Output (Go!)\".</em>
+        </div>
+    </section>
+</div>
+
+<script>
+    let transitionMatrix = {};
+    let wordFrequencies = {};
+    let startWord = '';
+
+    function buildMatrix() {
+        const text = document.getElementById('text-input').value.toLowerCase();
+        if (!text.trim()) {
+            alert('Please paste some text into the input box.');
+            return;
+        }
+
+        const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
+
+        transitionMatrix = {};
+        wordFrequencies = {};
+
+        for (let i = 0; i < words.length; i++) {
+            const currentWord = words[i];
+            const nextWord = words[i + 1];
+
+            wordFrequencies[currentWord] = (wordFrequencies[currentWord] || 0) + 1;
+
+            if (nextWord) {
+                if (!transitionMatrix[currentWord]) {
+                    transitionMatrix[currentWord] = {};
+                }
+                transitionMatrix[currentWord][nextWord] = (transitionMatrix[currentWord][nextWord] || 0) + 1;
+            }
+        }
+
+        let maxFreq = 0;
+        startWord = '';
+        for (const word in wordFrequencies) {
+            if (wordFrequencies[word] > maxFreq) {
+                maxFreq = wordFrequencies[word];
+                startWord = word;
+            }
+        }
+
+        let outputHTML = '';
+        let validMatrix = false;
+        for (const currentWord in transitionMatrix) {
+            const totalTransitions = Object.values(transitionMatrix[currentWord]).reduce((a, b) => a + b, 0);
+            outputHTML += `<strong>${currentWord}</strong> →<br>`;
+            for (const nextWord in transitionMatrix[currentWord]) {
+                const count = transitionMatrix[currentWord][nextWord];
+                const weight = (count / totalTransitions).toFixed(3);
+                outputHTML += `&nbsp;&nbsp;&nbsp;&nbsp;→ ${nextWord}: ${weight} (${count}/${totalTransitions})<br>`;
+            }
+            outputHTML += '<br>';
+            validMatrix = true;
+        }
+
+        document.getElementById('matrix-output').innerHTML = outputHTML || '<em>No transitions found. Check input length.</em>';
+        document.getElementById('start-word').textContent = startWord || 'N/A';
+        document.getElementById('generate-button').disabled = !(startWord && validMatrix);
+    }
+
+    function generateText() {
+        if (!startWord || Object.keys(transitionMatrix).length === 0) {
+            document.getElementById('llm-output').textContent = 'Please build the matrix first with enough text!';
+            return;
+        }
+
+        let currentWord = startWord;
+        let generatedText = [currentWord];
+        const maxWords = 50;
+
+        for (let i = 0; i < maxWords; i++) {
+            const possibleNextWords = transitionMatrix[currentWord];
+            if (!possibleNextWords) break;
+
+            const candidates = [];
+            for (const word in possibleNextWords) {
+                const count = possibleNextWords[word];
+                for (let k = 0; k < count; k++) {
+                    candidates.push(word);
+                }
+            }
+
+            const randomIndex = Math.floor(Math.random() * candidates.length);
+            const nextWord = candidates[randomIndex];
+            if (nextWord) {
+                generatedText.push(nextWord);
+                currentWord = nextWord;
+            } else {
+                break;
+            }
+        }
+
+        const finalOutput = generatedText.join(' ');
+        const formattedOutput = finalOutput.charAt(0).toUpperCase() + finalOutput.slice(1) + '.';
+
+        document.getElementById('llm-output').textContent = formattedOutput;
+    }
+</script>
+</body>
+</html>
