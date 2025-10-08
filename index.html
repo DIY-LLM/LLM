@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Markov Text Generator</title>
+    <title>Markov Text Generator with Word Range</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -65,73 +65,93 @@
             border-radius: 4px;
             min-height: 50px;
         }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        #word-count-display {
+            min-width: 40px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>Simple Markov Text Generator</h1>
-    <p>Upload a set of text to build a conceptual Transition Matrix for a simple Language Model.</p>
+    <h1>Markov Text Generator</h1>
+    <p>Paste text to build a conceptual Markov Transition Matrix and generate summaries.</p>
 
     <section>
         <h2>Input Dataset</h2>
-        <textarea id="text-input" placeholder="Paste your text data here (e.g., a few paragraphs or sentences)..."></textarea>
-        <button onclick="buildMatrix()">1. Build & Visualize Matrix</button>
+        <textarea id="text-input" placeholder="Paste your text data here..."></textarea>
+        <button onclick="buildMatrix()">Build & Visualize Matrix</button>
     </section>
 
     <hr>
 
     <section>
         <h2>Transition Matrix (Conceptual)</h2>
-        <p>This shows the probability weights of one word following another (1st-order Markov Chain).</p>
         <div id="matrix-output">
-            <em>Matrix will appear here after clicking \"Build & Visualize Matrix\".</em>
-            <br>
+            <em>Matrix will appear here after building.</em><br>
             <strong>Most Frequent/Starting Word:</strong> <span id="start-word">N/A</span>
         </div>
-        <button id="generate-button" onclick="generateText()" disabled>2. Generate LLM Output (Go!)</button>
     </section>
 
     <hr>
 
     <section>
-        <h2>Generated LLM Output</h2>
+        <h2>Generate Text</h2>
+        <div class="slider-container">
+            <label for="word-count">Output words:</label>
+            <input type="range" id="word-count" min="100" max="1000" value="500">
+            <span id="word-count-display">500</span>
+        </div>
+        <button onclick="generateText()">Generate LLM Output</button>
         <div id="llm-output">
-            <em>Generated text will appear here after clicking \"Generate LLM Output (Go!)\".</em>
+            <em>Generated text will appear here.</em>
         </div>
     </section>
 </div>
 
 <script>
     let transitionMatrix = {};
-    let wordFrequencies = {};
     let startWord = '';
+
+    // Update slider display
+    const slider = document.getElementById('word-count');
+    const display = document.getElementById('word-count-display');
+    slider.addEventListener('input', () => {
+        display.textContent = slider.value;
+    });
 
     function buildMatrix() {
         const text = document.getElementById('text-input').value.toLowerCase();
         if (!text.trim()) {
-            alert('Please paste some text into the input box.');
+            alert('Please paste some text.');
             return;
         }
 
         const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
 
         transitionMatrix = {};
-        wordFrequencies = {};
+        let wordFrequencies = {};
 
         for (let i = 0; i < words.length; i++) {
-            const currentWord = words[i];
-            const nextWord = words[i + 1];
+            const current = words[i];
+            const next = words[i + 1];
+            wordFrequencies[current] = (wordFrequencies[current] || 0) + 1;
 
-            wordFrequencies[currentWord] = (wordFrequencies[currentWord] || 0) + 1;
-
-            if (nextWord) {
-                if (!transitionMatrix[currentWord]) {
-                    transitionMatrix[currentWord] = {};
-                }
-                transitionMatrix[currentWord][nextWord] = (transitionMatrix[currentWord][nextWord] || 0) + 1;
+            if (next) {
+                if (!transitionMatrix[current]) transitionMatrix[current] = {};
+                transitionMatrix[current][next] = (transitionMatrix[current][next] || 0) + 1;
             }
         }
 
+        // Determine most frequent starting word
         let maxFreq = 0;
         startWord = '';
         for (const word in wordFrequencies) {
@@ -141,61 +161,53 @@
             }
         }
 
-        let outputHTML = '';
-        let validMatrix = false;
-        for (const currentWord in transitionMatrix) {
-            const totalTransitions = Object.values(transitionMatrix[currentWord]).reduce((a, b) => a + b, 0);
-            outputHTML += `<strong>${currentWord}</strong> →<br>`;
-            for (const nextWord in transitionMatrix[currentWord]) {
-                const count = transitionMatrix[currentWord][nextWord];
-                const weight = (count / totalTransitions).toFixed(3);
-                outputHTML += `&nbsp;&nbsp;&nbsp;&nbsp;→ ${nextWord}: ${weight} (${count}/${totalTransitions})<br>`;
+        // Display matrix
+        let output = '';
+        for (const current in transitionMatrix) {
+            const total = Object.values(transitionMatrix[current]).reduce((a,b)=>a+b,0);
+            output += `<strong>${current}</strong> →<br>`;
+            for (const next in transitionMatrix[current]) {
+                const count = transitionMatrix[current][next];
+                const weight = (count / total).toFixed(3);
+                output += `&nbsp;&nbsp;&nbsp;&nbsp;→ ${next}: ${weight} (${count}/${total})<br>`;
             }
-            outputHTML += '<br>';
-            validMatrix = true;
+            output += '<br>';
         }
 
-        document.getElementById('matrix-output').innerHTML = outputHTML || '<em>No transitions found. Check input length.</em>';
+        document.getElementById('matrix-output').innerHTML = output || '<em>No transitions found.</em>';
         document.getElementById('start-word').textContent = startWord || 'N/A';
-        document.getElementById('generate-button').disabled = !(startWord && validMatrix);
     }
 
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
-            document.getElementById('llm-output').textContent = 'Please build the matrix first with enough text!';
+            document.getElementById('llm-output').textContent = 'Build the matrix first!';
             return;
         }
 
+        const maxWords = parseInt(slider.value);
         let currentWord = startWord;
-        let generatedText = [currentWord];
-        const maxWords = 50;
+        let generated = [currentWord];
 
-        for (let i = 0; i < maxWords; i++) {
-            const possibleNextWords = transitionMatrix[currentWord];
-            if (!possibleNextWords) break;
+        for (let i = 1; i < maxWords; i++) {
+            const nextWords = transitionMatrix[currentWord];
+            if (!nextWords) break;
 
+            // Weighted random selection
             const candidates = [];
-            for (const word in possibleNextWords) {
-                const count = possibleNextWords[word];
-                for (let k = 0; k < count; k++) {
-                    candidates.push(word);
-                }
+            for (const w in nextWords) {
+                for (let k = 0; k < nextWords[w]; k++) candidates.push(w);
             }
 
-            const randomIndex = Math.floor(Math.random() * candidates.length);
-            const nextWord = candidates[randomIndex];
-            if (nextWord) {
-                generatedText.push(nextWord);
-                currentWord = nextWord;
-            } else {
-                break;
-            }
+            const nextWord = candidates[Math.floor(Math.random() * candidates.length)];
+            if (!nextWord) break;
+            generated.push(nextWord);
+            currentWord = nextWord;
         }
 
-        const finalOutput = generatedText.join(' ');
-        const formattedOutput = finalOutput.charAt(0).toUpperCase() + finalOutput.slice(1) + '.';
-
-        document.getElementById('llm-output').textContent = formattedOutput;
+        // Capitalize first word and add period
+        let output = generated.join(' ');
+        output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
+        document.getElementById('llm-output').textContent = output;
     }
 </script>
 </body>
