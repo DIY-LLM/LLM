@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markov Text Generator with Word Range</title>
+    <title>Markov Text Generator with File Upload</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -57,6 +57,16 @@
             white-space: pre-wrap;
             font-family: 'Courier New', monospace;
             font-size: 0.9em;
+            position: relative;
+        }
+        #copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background-color: #FFD700;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
         }
         #llm-output {
             margin-top: 20px;
@@ -78,16 +88,20 @@
             min-width: 40px;
             text-align: center;
         }
+        input[type="file"] {
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>Markov Text Generator</h1>
-    <p>Paste text to build a conceptual Markov Transition Matrix and generate summaries.</p>
+    <p>Paste text or upload files to build a Markov Transition Matrix and generate summaries.</p>
 
     <section>
         <h2>Input Dataset</h2>
-        <textarea id="text-input" placeholder="Paste your text data here..."></textarea>
+        <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+        <textarea id="text-input" placeholder="Paste or upload your text data here..."></textarea>
         <button onclick="buildMatrix()">Build & Visualize Matrix</button>
     </section>
 
@@ -96,6 +110,7 @@
     <section>
         <h2>Transition Matrix (Conceptual)</h2>
         <div id="matrix-output">
+            <button id="copy-btn" onclick="copyMatrix()">Copy</button>
             <em>Matrix will appear here after building.</em><br>
             <strong>Most Frequent/Starting Word:</strong> <span id="start-word">N/A</span>
         </div>
@@ -121,17 +136,32 @@
     let transitionMatrix = {};
     let startWord = '';
 
-    // Update slider display
+    // Slider display update
     const slider = document.getElementById('word-count');
     const display = document.getElementById('word-count-display');
-    slider.addEventListener('input', () => {
-        display.textContent = slider.value;
+    slider.addEventListener('input', () => display.textContent = slider.value);
+
+    // Handle file uploads
+    document.getElementById('file-input').addEventListener('change', async function(event) {
+        const files = event.target.files;
+        if (!files.length) return;
+        let allText = '';
+
+        for (const file of files) {
+            const text = await file.text();
+            allText += '\n' + text;
+        }
+
+        const textArea = document.getElementById('text-input');
+        textArea.value += '\n' + allText.trim();
+        alert(`${files.length} file(s) added to dataset.`);
     });
 
+    // Build transition matrix
     function buildMatrix() {
         const text = document.getElementById('text-input').value.toLowerCase();
         if (!text.trim()) {
-            alert('Please paste some text.');
+            alert('Please provide some text or upload files.');
             return;
         }
 
@@ -151,7 +181,6 @@
             }
         }
 
-        // Determine most frequent starting word
         let maxFreq = 0;
         startWord = '';
         for (const word in wordFrequencies) {
@@ -161,10 +190,9 @@
             }
         }
 
-        // Display matrix
         let output = '';
         for (const current in transitionMatrix) {
-            const total = Object.values(transitionMatrix[current]).reduce((a,b)=>a+b,0);
+            const total = Object.values(transitionMatrix[current]).reduce((a, b) => a + b, 0);
             output += `<strong>${current}</strong> →<br>`;
             for (const next in transitionMatrix[current]) {
                 const count = transitionMatrix[current][next];
@@ -174,10 +202,14 @@
             output += '<br>';
         }
 
-        document.getElementById('matrix-output').innerHTML = output || '<em>No transitions found.</em>';
-        document.getElementById('start-word').textContent = startWord || 'N/A';
+        document.getElementById('matrix-output').innerHTML = `
+            <button id="copy-btn" onclick="copyMatrix()">Copy</button>
+            ${output || '<em>No transitions found.</em>'}
+            <br><strong>Most Frequent/Starting Word:</strong> <span id="start-word">${startWord || 'N/A'}</span>
+        `;
     }
 
+    // Generate text based on matrix
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
@@ -192,7 +224,6 @@
             const nextWords = transitionMatrix[currentWord];
             if (!nextWords) break;
 
-            // Weighted random selection
             const candidates = [];
             for (const w in nextWords) {
                 for (let k = 0; k < nextWords[w]; k++) candidates.push(w);
@@ -204,13 +235,18 @@
             currentWord = nextWord;
         }
 
-        // Capitalize first word and add period
         let output = generated.join(' ');
         output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
         document.getElementById('llm-output').textContent = output;
     }
+
+    // Copy matrix content
+    function copyMatrix() {
+        const matrixText = document.getElementById('matrix-output').innerText;
+        navigator.clipboard.writeText(matrixText).then(() => {
+            alert('Transition matrix copied to clipboard!');
+        });
+    }
 </script>
 </body>
 </html>
-
-
