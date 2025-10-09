@@ -158,7 +158,7 @@
         <h2>Input Dataset</h2>
         <div class="upload-container" id="drop-zone">
             <label class="upload-label" for="file-input">Choose Files (.txt, .csv, .md)</label>
-            <input type="file" id="file-input" **multiple** accept=".txt,.csv,.md"> 
+            <input type="file" id="file-input" multiple accept=".txt,.csv,.md"> 
             <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Drag and drop files here or click to upload.</p>
             <div id="file-preview"></div>
         </div>
@@ -216,32 +216,37 @@
     dropZone.addEventListener('dragleave', () => {
         dropZone.style.borderColor = '#FFD700';
     });
+    // Drag/Drop clears the preview area before adding the new batch
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.style.borderColor = '#FFD700';
+        filePreview.innerHTML = ''; // **FIX: Clear preview to avoid duplication if dropping multiple times**
         handleFiles(e.dataTransfer.files);
     });
 
     // Handle file selection
-    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    fileInput.addEventListener('change', (e) => {
+        filePreview.innerHTML = ''; // **FIX: Clear preview whenever the file picker is used**
+        handleFiles(e.target.files);
+    });
 
     async function handleFiles(files) {
         if (!files.length) return;
 
-        // Clear only the file preview, not the textarea
-        filePreview.innerHTML = ''; 
         let allText = '';
 
         for (const file of files) {
             try {
-                // The FileReader API handles reading the contents of each file
                 const text = await file.text();
                 allText += '\n' + text;
+                
+                // --- Previews are now appended in every run ---
                 const fileDiv = document.createElement('div');
                 fileDiv.classList.add('file-item');
                 // Display file name and size
                 fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
-                filePreview.appendChild(fileDiv);
+                filePreview.appendChild(fileDiv); // Appends the new file preview
+                
             } catch (e) {
                 console.error(`Error reading file ${file.name}:`, e);
                 alert(`Could not read file: ${file.name}`);
@@ -318,8 +323,7 @@
         `;
     }
 
-    // --- Generate Text (Same logic as original) ---
-
+    // --- Generate Text (No Change) ---
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
