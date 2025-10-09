@@ -58,11 +58,14 @@
             text-align: center;
             margin-bottom: 15px;
             position: relative;
-            transition: background-color 0.3s, border-color 0.3s;
+            transition: background-color 0.3s, border-color 0.3s, background-color 0.3s;
         }
-        .upload-container:hover {
-            background-color: #FFFACD;
+        /* New: Dragover Hover Effect */
+        .upload-container.drag-over {
+            background-color: #FFF0B0 !important;
+            border-color: #FFA500;
         }
+        
         .upload-label {
             background-color: #FFD700;
             color: #333;
@@ -90,6 +93,7 @@
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid #eee;
+            min-height: 20px; /* Ensure space for analytics or previews */
         }
         .file-item {
             background-color: #FFFACD;
@@ -101,6 +105,20 @@
             align-items: center;
             gap: 6px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* File Analytics Style */
+        #file-analytics {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #fff8e1;
+            border-radius: 4px;
+            font-size: 0.95em;
+            color: #555;
+            border: 1px solid #FFD700;
+        }
+        #file-analytics strong {
+            color: #333;
         }
 
         /* Analytics/Matrix output area */
@@ -156,6 +174,7 @@
 
     <section>
         <h2>Input Dataset</h2>
+        <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
         <div class="upload-container" id="drop-zone">
             <label class="upload-label" for="file-input">Choose Files (.txt, .csv, .md)</label>
             <input type="file" id="file-input" multiple accept=".txt,.csv,.md"> 
@@ -196,6 +215,8 @@
 <script>
     let transitionMatrix = {};
     let startWord = '';
+    // NEW: Array to track ALL files uploaded cumulatively
+    let allUploadedFiles = []; 
 
     const slider = document.getElementById('word-count');
     const display = document.getElementById('word-count-display');
@@ -205,59 +226,96 @@
     const filePreview = document.getElementById('file-preview');
     const dropZone = document.getElementById('drop-zone');
     const textArea = document.getElementById('text-input');
+    const fileAnalytics = document.getElementById('file-analytics');
+
+    // --- Utility Functions ---
+
+    // NEW: Function to display file count and total size
+    function updateFileAnalytics() {
+        const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
+        const sizeInKB = (totalSize / 1024).toFixed(1);
+        fileAnalytics.innerHTML = `<strong>${allUploadedFiles.length}</strong> Files Uploaded (${sizeInKB} KB)`;
+    }
+
+    // NEW: Function to clear the preview and re-render all tracked files
+    function renderFilePreviews() {
+        filePreview.innerHTML = '';
+        allUploadedFiles.forEach(file => {
+            const fileDiv = document.createElement('div');
+            fileDiv.classList.add('file-item');
+            fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+            filePreview.appendChild(fileDiv);
+        });
+        updateFileAnalytics();
+    }
 
     // --- File Handling (Multi-Upload & Drag/Drop) ---
 
-    // Handle drag and drop
+    // Handle drag and drop events (for visual feedback)
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        dropZone.style.borderColor = '#FFA500';
+        dropZone.classList.add('drag-over'); // Responsive feedback on dragover
+        e.dataTransfer.dropEffect = 'copy';
     });
     dropZone.addEventListener('dragleave', () => {
-        dropZone.style.borderColor = '#FFD700';
+        dropZone.classList.remove('drag-over');
     });
-    // Drag/Drop clears the preview area before adding the new batch
+
+    // Handle file drop
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropZone.style.borderColor = '#FFD700';
-        filePreview.innerHTML = ''; // **FIX: Clear preview to avoid duplication if dropping multiple times**
+        dropZone.classList.remove('drag-over');
         handleFiles(e.dataTransfer.files);
     });
 
-    // Handle file selection
+    // Handle file selection (button click)
     fileInput.addEventListener('change', (e) => {
-        filePreview.innerHTML = ''; // **FIX: Clear preview whenever the file picker is used**
         handleFiles(e.target.files);
+        // Reset the input value so the same file(s) can be selected again
+        fileInput.value = null; 
     });
 
     async function handleFiles(files) {
         if (!files.length) return;
 
-        let allText = '';
-
+        let allText = textArea.value.trim();
+        
+        // Add new files to the global tracker
         for (const file of files) {
-            try {
-                const text = await file.text();
-                allText += '\n' + text;
-                
-                // --- Previews are now appended in every run ---
-                const fileDiv = document.createElement('div');
-                fileDiv.classList.add('file-item');
-                // Display file name and size
-                fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
-                filePreview.appendChild(fileDiv); // Appends the new file preview
-                
-            } catch (e) {
-                console.error(`Error reading file ${file.name}:`, e);
-                alert(`Could not read file: ${file.name}`);
-            }
+            allUploadedFiles.push(file); 
         }
 
-        // Append content from all files to the existing text area content
-        textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim(); 
+        // Process ALL files in the global tracker to rebuild the textarea content
+        // This is done to ensure the textarea content is always synchronized with the tracked files.
+        allText = ''; // Start fresh text content
+        for (const file of allUploadedFiles) {
+            try {
+                // Since File objects can only be read once directly from the input,
+                // we'll rely on the cumulative text append logic OR a new file read.
+                // For simplicity and directness, we will read the text for the newly added batch
+                // and append it to the existing textarea content.
+                // A more robust solution would track read text or use IndexedDB, but that's complex.
+                // Here, we only read the *new* files and append to the existing textarea content.
+                
+                // Find files in the batch that are new (simple check, assuming no file has the same name)
+                const isNewFile = Array.from(files).includes(file);
+                if (isNewFile) {
+                    const text = await file.text();
+                    allText += '\n' + text;
+                }
+            } catch (e) {
+                console.error(`Error reading file ${file.name}:`, e);
+            }
+        }
+        
+        // Append text from the newly processed batch to the existing textarea content
+        textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim();
+        
+        // Re-render the full list of file previews and update analytics
+        renderFilePreviews();
     }
 
-    // --- Markov Matrix Computation & Analytics Display ---
+    // --- Markov Matrix Computation & Analytics Display (Logic remains the same) ---
 
     function buildMatrix() {
         const text = textArea.value.toLowerCase();
@@ -323,7 +381,7 @@
         `;
     }
 
-    // --- Generate Text (No Change) ---
+    // --- Generate Text (Logic remains the same) ---
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
@@ -353,6 +411,9 @@
         output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
         document.getElementById('llm-output').textContent = output;
     }
+
+    // Initialize analytics on load
+    updateFileAnalytics();
 </script>
 </body>
 </html>
