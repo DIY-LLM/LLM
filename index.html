@@ -49,10 +49,10 @@
             background-color: #FFA500;
         }
 
-        /* NEW: Stylized file upload area */
+        /* Stylized file upload area */
         .upload-container {
             border: 2px dashed #FFD700;
-            background-color: #FFFACD50; /* Slight color for the drop zone */
+            background-color: #FFFACD50; 
             border-radius: 6px;
             padding: 20px;
             text-align: center;
@@ -64,7 +64,6 @@
             background-color: #FFFACD;
         }
         .upload-label {
-            /* Styles the button for file selection */
             background-color: #FFD700;
             color: #333;
             padding: 10px 20px;
@@ -79,10 +78,10 @@
             background-color: #FFA500;
         }
         #file-input {
-            display: none; /* Hide the default input */
+            display: none; 
         }
 
-        /* NEW: File preview styling */
+        /* File preview styling */
         #file-preview {
             display: flex;
             flex-wrap: wrap;
@@ -104,7 +103,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
-        /* NEW: Analytics/Matrix output area */
+        /* Analytics/Matrix output area */
         #matrix-output {
             margin-top: 20px;
             padding: 15px;
@@ -124,7 +123,7 @@
             border-bottom: none;
         }
         .analytic-item strong {
-            color: #8B4513; /* Brown for emphasis */
+            color: #8B4513; 
             font-size: 1.1em;
         }
 
@@ -159,7 +158,7 @@
         <h2>Input Dataset</h2>
         <div class="upload-container" id="drop-zone">
             <label class="upload-label" for="file-input">Choose Files (.txt, .csv, .md)</label>
-            <input type="file" id="file-input" multiple accept=".txt,.csv,.md"> 
+            <input type="file" id="file-input" **multiple** accept=".txt,.csv,.md"> 
             <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Drag and drop files here or click to upload.</p>
             <div id="file-preview"></div>
         </div>
@@ -229,11 +228,13 @@
     async function handleFiles(files) {
         if (!files.length) return;
 
-        filePreview.innerHTML = ''; // Clear previous previews
+        // Clear only the file preview, not the textarea
+        filePreview.innerHTML = ''; 
         let allText = '';
 
         for (const file of files) {
             try {
+                // The FileReader API handles reading the contents of each file
                 const text = await file.text();
                 allText += '\n' + text;
                 const fileDiv = document.createElement('div');
@@ -247,7 +248,7 @@
             }
         }
 
-        // Append to the text area, trimming initial/final whitespace
+        // Append content from all files to the existing text area content
         textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim(); 
     }
 
