@@ -20,7 +20,7 @@
             background-color: #FFFFFF;
             padding: 40px;
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15); /* More pronounced shadow for depth */
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
         }
         h1 {
             color: #FFD700;
@@ -30,7 +30,7 @@
             margin-bottom: 30px;
         }
         h2 {
-            color: #8B4513; /* Brown for section headings */
+            color: #8B4513; 
             font-weight: 400;
             margin-top: 0;
             margin-bottom: 15px;
@@ -38,7 +38,7 @@
         
         /* --- Input & Control Elements --- */
         textarea, #llm-output, #matrix-output {
-            font-family: 'Consolas', 'Courier New', monospace; /* Monospace for code/data feel */
+            font-family: 'Consolas', 'Courier New', monospace; 
             width: 100%;
             padding: 15px;
             border: 1px solid #ddd;
@@ -89,11 +89,11 @@
         }
         /* Styling specific to the AWS card for visual differentiation */
         #aws-card {
-            border-color: #FF9900; /* AWS color emphasis */
+            border-color: #FF9900;
             background-color: #FFFACD;
         }
         #aws-card button {
-            background-color: #FF9900; /* AWS button color */
+            background-color: #FF9900;
             color: white;
         }
         #aws-card button:hover {
@@ -163,6 +163,27 @@
         #file-analytics strong {
             color: #333;
         }
+        
+        /* STREAMING PROGRESS BAR STYLES */
+        .progress-bar-container {
+            width: 100%;
+            background-color: #eee;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+            display: none; /* Hidden by default */
+        }
+        .progress-bar {
+            height: 15px;
+            background-color: #FF9900; /* AWS Orange */
+            width: 0%;
+            text-align: center;
+            line-height: 15px;
+            color: white;
+            font-size: 10px;
+            transition: width 0.3s ease-out;
+        }
+        
         #file-preview {
             display: flex;
             flex-wrap: wrap;
@@ -281,6 +302,9 @@
              <p style="margin: 0; font-weight: bold;">Drop files here or check AWS/Kaggle options above.</p>
              <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
              <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
+             <div id="progress-container" class="progress-bar-container">
+                 <div id="progress-bar" class="progress-bar">0%</div>
+             </div>
              <div id="file-preview"></div>
         </div>
 
@@ -317,7 +341,6 @@
     let transitionMatrix = {};
     let startWord = '';
     let allUploadedFiles = []; 
-    // Latency Threshold: 2 MB. Above this size, the browser may lag significantly.
     const LATENCY_THRESHOLD_BYTES = 2048000; 
 
     const slider = document.getElementById('word-count');
@@ -329,15 +352,15 @@
     const dropZone = document.getElementById('drop-zone');
     const textArea = document.getElementById('text-input');
     const fileAnalytics = document.getElementById('file-analytics');
+    const progressBarContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
 
-    // --- AWS S3 Integration Logic (Optional) ---
+    // --- AWS S3 Integration Logic (Streaming) ---
 
     async function connectAwsS3() {
-        // Explicitly reminds the user of the GitHub Pages limitation.
         const s3Url = prompt(
             "Enter the full **Pre-Signed S3 URL** or **Public URL** of the file (.txt, .csv, .md).\n\n" +
-            "NOTE: This GitHub Pages front-end cannot securely handle private AWS credentials. " +
-            "A server-side component (e.g., AWS Lambda/API Gateway) is REQUIRED to generate a secure, temporary, pre-signed URL for a private S3 object."
+            "NOTE: This GitHub Pages front-end cannot handle private AWS credentials. A server-side component is REQUIRED to generate a secure, temporary, pre-signed URL for a private S3 object."
         );
 
         if (!s3Url) {
@@ -348,44 +371,112 @@
         const isFileUrl = s3Url.toLowerCase().startsWith('http') && (s3Url.toLowerCase().endsWith('.txt') || s3Url.toLowerCase().endsWith('.csv') || s3Url.toLowerCase().endsWith('.md'));
 
         if (isFileUrl) {
-            alert(`Attempting to fetch data from the provided S3 URL.\n\n(Assuming this URL is pre-signed or publicly accessible.)`);
             await fetchDataFromCloud(s3Url);
         } else {
              alert(`Invalid URL format detected or connection aborted. Please enter a direct file URL.`);
         }
     }
 
+    /**
+     * Fetches data from S3 using ReadableStream API for memory-efficient chunking.
+     * @param {string} url The pre-signed or public S3 URL of the file.
+     */
     async function fetchDataFromCloud(url) {
+        let totalBytesStreamed = 0;
+        let objectContentLength = null;
+        let isFirstChunk = true;
+        const fileName = url.split('/').pop().split('?')[0] || 'aws_data.txt';
+
+        // 1. Setup UI for streaming
+        progressBarContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        
+        fileAnalytics.innerHTML = `<strong>Streaming ${fileName}...</strong>`;
+
+
         try {
             const response = await fetch(url);
             
             if (!response.ok) {
-                throw new Error(`Failed to fetch data: HTTP error ${response.status}. This usually means the S3 Pre-Signed URL has expired or is invalid.`);
+                // Check if Content-Length exists (needed for progress)
+                if (response.headers.has('Content-Length')) {
+                    objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
+                }
+
+                throw new Error(`HTTP Error ${response.status}. Pre-Signed URL may be expired, or there's a CORS issue.`);
             }
 
-            const text = await response.text();
+            // Get Content-Length for progress bar if available
+            if (response.headers.has('Content-Length')) {
+                objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
             
+            // Start the streaming loop
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
+
+                // Decode chunk to text
+                const chunkText = decoder.decode(value, { stream: true });
+                
+                // Prepend a newline only once, after the first local file or paste content
+                if (isFirstChunk) {
+                    textArea.value = textArea.value.trim();
+                    if (textArea.value.length > 0) {
+                        textArea.value += '\n';
+                    }
+                    isFirstChunk = false;
+                }
+                
+                // Append the chunk text directly to the textarea (non-blocking)
+                textArea.value += chunkText;
+
+                // Update progress tracking
+                totalBytesStreamed += value.length;
+                
+                if (objectContentLength) {
+                    const percentage = Math.min(100, Math.round((totalBytesStreamed / objectContentLength) * 100));
+                    progressBar.style.width = `${percentage}%`;
+                    progressBar.textContent = `${percentage}%`;
+                } else {
+                    // Fallback progress display if Content-Length is missing (e.g. gzip)
+                    const streamedMB = (totalBytesStreamed / 1048576).toFixed(2);
+                    progressBar.textContent = `${streamedMB} MB streamed...`;
+                }
+            }
+            
+            // Add the final text from the TextDecoder buffer
+            textArea.value += decoder.decode();
+
+            // 2. Finalize UI and Tracking
+            progressBarContainer.style.display = 'none';
+
             const mockFile = {
-                name: url.split('/').pop().split('?')[0] || 'aws_data.txt',
-                size: text.length,
-                text: () => Promise.resolve(text)
+                name: fileName,
+                size: totalBytesStreamed, // Use the actual streamed size
+                text: () => Promise.resolve(textArea.value.trim())
             };
             
             allUploadedFiles.push(mockFile);
-            
-            textArea.value = (textArea.value.trim() + '\n' + text.trim()).trim();
             renderFilePreviews();
             
-            alert(`✅ Successfully fetched and appended data from S3 file: ${mockFile.name}!`);
+            alert(`✅ Streaming Complete! Successfully appended ${ (totalBytesStreamed / 1048576).toFixed(2) } MB from S3 file: ${fileName}.`);
 
         } catch (error) {
-            console.error("Cloud Fetch Error:", error);
-            alert(`❌ Error fetching cloud data: ${error.message}`);
+            // 3. Error Handling
+            progressBarContainer.style.display = 'none';
+            console.error("Cloud Streaming Error:", error);
+            alert(`❌ Error streaming cloud data: ${error.message}`);
         }
     }
 
 
-    // --- Core File Handling with Latency Check ---
+    // --- Core File Handling with Latency Check (Preserved) ---
 
     function updateFileAnalytics() {
         const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -398,7 +489,11 @@
         allUploadedFiles.forEach(file => {
             const fileDiv = document.createElement('div');
             fileDiv.classList.add('file-item');
-            fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+            // Show size in KB/MB appropriately
+            const sizeDisplay = file.size > 1048576 
+                                ? `${(file.size / 1048576).toFixed(2)} MB` 
+                                : `${(file.size / 1024).toFixed(1)} KB`;
+            fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${sizeDisplay})`;
             filePreview.appendChild(fileDiv);
         });
         updateFileAnalytics();
@@ -432,7 +527,7 @@
         
         for (const file of files) {
             allUploadedFiles.push(file); 
-            totalNewSize += file.size; // Track size of the *new* batch
+            totalNewSize += file.size;
         }
 
         for (const file of files) { 
@@ -448,18 +543,19 @@
         renderFilePreviews();
 
 
-        // 📢 NEW: Latency Suggestion Logic 
+        // Latency Suggestion Logic 
         if (totalNewSize > LATENCY_THRESHOLD_BYTES) {
             const sizeInMB = (totalNewSize / 1048576).toFixed(2);
             setTimeout(() => {
-                 alert(`⚠️ **High Latency Alert:** You uploaded ${sizeInMB} MB. Processing datasets this large in the browser can lead to significant lag or crashes. For better performance and to leverage cloud compute, consider using the **AWS S3 Storage** option for large files.`);
-            }, 100); // Small delay to ensure the file processing completes visually first
+                 alert(`⚠️ **High Latency Alert:** You uploaded ${sizeInMB} MB. Processing datasets this large in the browser can lead to significant lag or crashes. For better performance, consider using the **AWS S3 Storage** streaming option for large files.`);
+            }, 100);
         }
     }
 
-    // --- Markov Matrix Computation & Analytics Display (Preserved) ---
+    // --- Markov Matrix Computation & Generate Text (Preserved) ---
 
     function buildMatrix() {
+        // ... (Matrix building logic remains unchanged)
         const text = textArea.value.toLowerCase();
         if (!text.trim()) {
             alert('Please provide some text or upload files.');
@@ -519,9 +615,8 @@
         `;
     }
 
-    // --- Generate Text (Preserved) ---
-
     function generateText() {
+        // ... (Text generation logic remains unchanged)
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
             return;
