@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markov Text Generator with File Upload & Scrollable Matrix</title>
+    <title>Markov Text Generator with Analytics & Multi-File Upload</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -49,9 +49,10 @@
             background-color: #FFA500;
         }
 
-        /* Stylized file upload area */
+        /* NEW: Stylized file upload area */
         .upload-container {
             border: 2px dashed #FFD700;
+            background-color: #FFFACD50; /* Slight color for the drop zone */
             border-radius: 6px;
             padding: 20px;
             text-align: center;
@@ -63,27 +64,33 @@
             background-color: #FFFACD;
         }
         .upload-label {
+            /* Styles the button for file selection */
             background-color: #FFD700;
             color: #333;
-            padding: 8px 16px;
+            padding: 10px 20px;
             border-radius: 4px;
             font-weight: bold;
             cursor: pointer;
             display: inline-block;
+            font-size: 16px;
+            transition: background-color 0.3s;
         }
         .upload-label:hover {
             background-color: #FFA500;
         }
         #file-input {
-            display: none;
+            display: none; /* Hide the default input */
         }
 
-        /* File preview styling */
+        /* NEW: File preview styling */
         #file-preview {
             display: flex;
             flex-wrap: wrap;
+            justify-content: center;
             gap: 10px;
             margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
         }
         .file-item {
             background-color: #FFFACD;
@@ -94,31 +101,31 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
-        /* Matrix section with scroll */
+        /* NEW: Analytics/Matrix output area */
         #matrix-output {
             margin-top: 20px;
             padding: 15px;
             background-color: #FFFACD;
             border: 1px solid #FFD700;
             border-radius: 4px;
-            white-space: pre-wrap;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
+            min-height: 100px;
             position: relative;
-            max-height: 400px;
-            overflow-y: auto;
+            font-size: 1em;
         }
-        #copy-btn {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background-color: #FFD700;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
+        .analytic-item {
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px dotted #FFD700;
+        }
+        .analytic-item:last-child {
+            border-bottom: none;
+        }
+        .analytic-item strong {
+            color: #8B4513; /* Brown for emphasis */
+            font-size: 1.1em;
         }
 
         #llm-output {
@@ -146,29 +153,28 @@
 <body>
 <div class="container">
     <h1>Markov Text Generator</h1>
-    <p>Paste text or upload files to build a Markov Transition Matrix and generate summaries.</p>
+    <p>Paste text or upload multiple files to build a Markov Transition Matrix and generate summaries.</p>
 
     <section>
         <h2>Input Dataset</h2>
         <div class="upload-container" id="drop-zone">
-            <label class="upload-label" for="file-input">Choose Files</label>
-            <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
-            <p style="margin-top: 8px; font-size: 0.9em;">Drag and drop files here or click to upload.</p>
+            <label class="upload-label" for="file-input">Choose Files (.txt, .csv, .md)</label>
+            <input type="file" id="file-input" multiple accept=".txt,.csv,.md"> 
+            <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Drag and drop files here or click to upload.</p>
             <div id="file-preview"></div>
         </div>
 
         <textarea id="text-input" placeholder="Paste or upload your text data here..."></textarea>
-        <button onclick="buildMatrix()">Build & Visualize Matrix</button>
+        <button onclick="buildMatrix()">Build Matrix & Show Analytics</button>
     </section>
 
     <hr>
 
     <section>
-        <h2>Transition Matrix (Conceptual)</h2>
+        <h2>Matrix Analytics (Conceptual)</h2>
         <div id="matrix-output">
-            <button id="copy-btn" onclick="copyMatrix()">Copy</button>
-            <em>Matrix will appear here after building.</em><br>
-            <strong>Most Frequent/Starting Word:</strong> <span id="start-word">N/A</span>
+            <em>Analytics derived from the transition matrix will appear here after building.</em>
+            <div id="analytics-summary"></div>
         </div>
     </section>
 
@@ -199,18 +205,21 @@
     const fileInput = document.getElementById('file-input');
     const filePreview = document.getElementById('file-preview');
     const dropZone = document.getElementById('drop-zone');
+    const textArea = document.getElementById('text-input');
+
+    // --- File Handling (Multi-Upload & Drag/Drop) ---
 
     // Handle drag and drop
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        dropZone.style.backgroundColor = '#FFF8B0';
+        dropZone.style.borderColor = '#FFA500';
     });
     dropZone.addEventListener('dragleave', () => {
-        dropZone.style.backgroundColor = '';
+        dropZone.style.borderColor = '#FFD700';
     });
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropZone.style.backgroundColor = '';
+        dropZone.style.borderColor = '#FFD700';
         handleFiles(e.dataTransfer.files);
     });
 
@@ -220,33 +229,42 @@
     async function handleFiles(files) {
         if (!files.length) return;
 
-        filePreview.innerHTML = ''; // clear previous previews
+        filePreview.innerHTML = ''; // Clear previous previews
         let allText = '';
 
         for (const file of files) {
-            const text = await file.text();
-            allText += '\n' + text;
-            const fileDiv = document.createElement('div');
-            fileDiv.classList.add('file-item');
-            fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
-            filePreview.appendChild(fileDiv);
+            try {
+                const text = await file.text();
+                allText += '\n' + text;
+                const fileDiv = document.createElement('div');
+                fileDiv.classList.add('file-item');
+                // Display file name and size
+                fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+                filePreview.appendChild(fileDiv);
+            } catch (e) {
+                console.error(`Error reading file ${file.name}:`, e);
+                alert(`Could not read file: ${file.name}`);
+            }
         }
 
-        const textArea = document.getElementById('text-input');
-        textArea.value += '\n' + allText.trim();
+        // Append to the text area, trimming initial/final whitespace
+        textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim(); 
     }
 
-    // Build transition matrix
+    // --- Markov Matrix Computation & Analytics Display ---
+
     function buildMatrix() {
-        const text = document.getElementById('text-input').value.toLowerCase();
+        const text = textArea.value.toLowerCase();
         if (!text.trim()) {
             alert('Please provide some text or upload files.');
             return;
         }
 
+        // Tokenization: Remove punctuation and split by whitespace
         const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
         transitionMatrix = {};
         let wordFrequencies = {};
+        let totalTransitions = 0;
 
         for (let i = 0; i < words.length; i++) {
             const current = words[i];
@@ -256,11 +274,16 @@
             if (next) {
                 if (!transitionMatrix[current]) transitionMatrix[current] = {};
                 transitionMatrix[current][next] = (transitionMatrix[current][next] || 0) + 1;
+                totalTransitions++;
             }
         }
 
+        // Calculate Analytics
+        const uniqueWords = Object.keys(wordFrequencies).length;
+        const totalWords = words.length;
         let maxFreq = 0;
         startWord = '';
+        
         for (const word in wordFrequencies) {
             if (wordFrequencies[word] > maxFreq) {
                 maxFreq = wordFrequencies[word];
@@ -268,26 +291,34 @@
             }
         }
 
-        let output = '';
+        // Find the word with the most outgoing transitions (highest entropy/variability)
+        let maxOutgoing = 0;
+        let mostVariableWord = 'N/A';
         for (const current in transitionMatrix) {
-            const total = Object.values(transitionMatrix[current]).reduce((a, b) => a + b, 0);
-            output += `<strong>${current}</strong> →<br>`;
-            for (const next in transitionMatrix[current]) {
-                const count = transitionMatrix[current][next];
-                const weight = (count / total).toFixed(3);
-                output += `&nbsp;&nbsp;&nbsp;&nbsp;→ ${next}: ${weight} (${count}/${total})<br>`;
+            const numNextWords = Object.keys(transitionMatrix[current]).length;
+            if (numNextWords > maxOutgoing) {
+                maxOutgoing = numNextWords;
+                mostVariableWord = current;
             }
-            output += '<br>';
         }
 
+        // Generate the Analytics Summary HTML
         document.getElementById('matrix-output').innerHTML = `
-            <button id="copy-btn" onclick="copyMatrix()">Copy</button>
-            ${output || '<em>No transitions found.</em>'}
-            <br><strong>Most Frequent/Starting Word:</strong> <span id="start-word">${startWord || 'N/A'}</span>
+            <h3>Dataset & Matrix Summary</h3>
+            <div class="analytic-item"><strong>Total Words:</strong> ${totalWords.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Unique Vocabulary Size:</strong> ${uniqueWords.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Total Transitions Mapped:</strong> ${totalTransitions.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Most Frequent Starting Word:</strong> <strong>${startWord || 'N/A'}</strong> (Occurs ${maxFreq.toLocaleString()} times)</div>
+            <div class="analytic-item"><strong>Most Variable Word (Highest Out-Degree):</strong> <strong>${mostVariableWord}</strong> (Leads to ${maxOutgoing} different words)</div>
+            <div class="analytic-item"><strong>Average Next-Word Options:</strong> ${(totalTransitions / uniqueWords).toFixed(2)}</div>
+            <div style="margin-top: 15px; font-size: 0.9em; color: #888;">
+                <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here using a library like Chart.js.)</em></p>
+            </div>
         `;
     }
 
-    // Generate text
+    // --- Generate Text (Same logic as original) ---
+
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
@@ -316,14 +347,6 @@
         let output = generated.join(' ');
         output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
         document.getElementById('llm-output').textContent = output;
-    }
-
-    // Copy matrix to clipboard
-    function copyMatrix() {
-        const matrixText = document.getElementById('matrix-output').innerText;
-        navigator.clipboard.writeText(matrixText).then(() => {
-            alert('Transition matrix copied to clipboard!');
-        });
     }
 </script>
 </body>
