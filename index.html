@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markov Text Generator with File Upload</title>
+    <title>Markov Text Generator with File Upload & Scrollable Matrix</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -48,6 +48,56 @@
         button:hover {
             background-color: #FFA500;
         }
+
+        /* Stylized file upload area */
+        .upload-container {
+            border: 2px dashed #FFD700;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+            position: relative;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .upload-container:hover {
+            background-color: #FFFACD;
+        }
+        .upload-label {
+            background-color: #FFD700;
+            color: #333;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            display: inline-block;
+        }
+        .upload-label:hover {
+            background-color: #FFA500;
+        }
+        #file-input {
+            display: none;
+        }
+
+        /* File preview styling */
+        #file-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .file-item {
+            background-color: #FFFACD;
+            border: 1px solid #FFD700;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Matrix section with scroll */
         #matrix-output {
             margin-top: 20px;
             padding: 15px;
@@ -58,6 +108,8 @@
             font-family: 'Courier New', monospace;
             font-size: 0.9em;
             position: relative;
+            max-height: 400px;
+            overflow-y: auto;
         }
         #copy-btn {
             position: absolute;
@@ -68,6 +120,7 @@
             border-radius: 4px;
             font-size: 12px;
         }
+
         #llm-output {
             margin-top: 20px;
             padding: 15px;
@@ -88,9 +141,6 @@
             min-width: 40px;
             text-align: center;
         }
-        input[type="file"] {
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
@@ -100,7 +150,13 @@
 
     <section>
         <h2>Input Dataset</h2>
-        <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+        <div class="upload-container" id="drop-zone">
+            <label class="upload-label" for="file-input">Choose Files</label>
+            <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+            <p style="margin-top: 8px; font-size: 0.9em;">Drag and drop files here or click to upload.</p>
+            <div id="file-preview"></div>
+        </div>
+
         <textarea id="text-input" placeholder="Paste or upload your text data here..."></textarea>
         <button onclick="buildMatrix()">Build & Visualize Matrix</button>
     </section>
@@ -136,26 +192,49 @@
     let transitionMatrix = {};
     let startWord = '';
 
-    // Slider display update
     const slider = document.getElementById('word-count');
     const display = document.getElementById('word-count-display');
     slider.addEventListener('input', () => display.textContent = slider.value);
 
-    // Handle file uploads
-    document.getElementById('file-input').addEventListener('change', async function(event) {
-        const files = event.target.files;
+    const fileInput = document.getElementById('file-input');
+    const filePreview = document.getElementById('file-preview');
+    const dropZone = document.getElementById('drop-zone');
+
+    // Handle drag and drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '#FFF8B0';
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.style.backgroundColor = '';
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = '';
+        handleFiles(e.dataTransfer.files);
+    });
+
+    // Handle file selection
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+    async function handleFiles(files) {
         if (!files.length) return;
+
+        filePreview.innerHTML = ''; // clear previous previews
         let allText = '';
 
         for (const file of files) {
             const text = await file.text();
             allText += '\n' + text;
+            const fileDiv = document.createElement('div');
+            fileDiv.classList.add('file-item');
+            fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+            filePreview.appendChild(fileDiv);
         }
 
         const textArea = document.getElementById('text-input');
         textArea.value += '\n' + allText.trim();
-        alert(`${files.length} file(s) added to dataset.`);
-    });
+    }
 
     // Build transition matrix
     function buildMatrix() {
@@ -166,7 +245,6 @@
         }
 
         const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
-
         transitionMatrix = {};
         let wordFrequencies = {};
 
@@ -209,7 +287,7 @@
         `;
     }
 
-    // Generate text based on matrix
+    // Generate text
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
@@ -240,7 +318,7 @@
         document.getElementById('llm-output').textContent = output;
     }
 
-    // Copy matrix content
+    // Copy matrix to clipboard
     function copyMatrix() {
         const matrixText = document.getElementById('matrix-output').innerText;
         navigator.clipboard.writeText(matrixText).then(() => {
