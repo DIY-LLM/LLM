@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sophisticated Markov Text Generator with Cloud Integration</title>
+    <title>Sophisticated Markov Text Generator with AWS S3 Integration</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         /* --- Base & Typography --- */
@@ -26,7 +26,7 @@
             color: #FFD700;
             border-bottom: 3px solid #FFD700;
             padding-bottom: 15px;
-            font-weight: 300; /* Lighter font weight for sophistication */
+            font-weight: 300; 
             margin-bottom: 30px;
         }
         h2 {
@@ -44,14 +44,14 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             box-sizing: border-box;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle inner shadow */
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
         }
         textarea {
             height: 180px;
             margin-bottom: 25px;
         }
 
-        /* Standard Button Style (reused for primary actions) */
+        /* Standard Button Style */
         button {
             background-color: #FFD700;
             color: #333;
@@ -77,16 +77,29 @@
             flex-wrap: wrap;
         }
         .data-source-card {
-            flex: 1 1 30%; /* Flexible cards in a row */
+            flex: 1 1 30%; 
             min-width: 250px;
             padding: 20px;
-            background-color: #FFFACD; /* Lightest gold/yellow */
+            background-color: #FFFACD; 
             border-radius: 8px;
             border: 2px solid #FFD700;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
             text-align: center;
             transition: border-color 0.3s;
         }
+        /* Styling specific to the AWS card for visual differentiation */
+        #aws-card {
+            border-color: #FF9900; /* AWS color emphasis */
+            background-color: #FFFACD;
+        }
+        #aws-card button {
+            background-color: #FF9900; /* AWS button color */
+            color: white;
+        }
+        #aws-card button:hover {
+            background-color: #FFA500;
+        }
+        
         .data-source-card h3 {
             color: #8B4513;
             margin-top: 0;
@@ -106,7 +119,7 @@
         /* --- Local Upload (Drag and Drop) --- */
         .upload-container {
             border: 2px dashed #FFD700;
-            background-color: #fff8e1; /* Slightly darker than card background */
+            background-color: #fff8e1;
             border-radius: 6px;
             padding: 20px;
             text-align: center;
@@ -140,7 +153,7 @@
         #file-analytics {
             margin-top: 15px;
             padding: 10px;
-            background-color: #FFD70020; /* Transparent gold for subtle look */
+            background-color: #FFD70020;
             border-left: 5px solid #FFD700;
             border-radius: 4px;
             font-size: 0.95em;
@@ -162,7 +175,7 @@
         .file-item {
             background-color: #FFFACD;
             border: 1px solid #FFD700;
-            border-radius: 15px; /* Pill shape */
+            border-radius: 15px; 
             padding: 5px 10px;
             font-size: 0.85em;
             white-space: nowrap;
@@ -175,7 +188,7 @@
         #matrix-output {
             padding: 25px;
             background-color: #FFFACD;
-            border-left: 5px solid #FFD700; /* Subtle border emphasis */
+            border-left: 5px solid #FFD700;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             min-height: 120px;
         }
@@ -207,7 +220,7 @@
             appearance: none;
             width: 100%;
             height: 8px;
-            background: #FFD70050; /* Transparent gold track */
+            background: #FFD70050;
             border-radius: 4px;
         }
         input[type="range"]::-webkit-slider-thumb {
@@ -231,7 +244,7 @@
 <body>
 <div class="container">
     <h1><i class="fas fa-sitemap"></i> Markov Text Matrix Studio</h1>
-    <p>A sophisticated tool for training a Markov Model using local files, cloud storage, or public datasets, and generating contextual text.</p>
+    <p>A sophisticated tool for training a Markov Model using local files, AWS S3, or public Kaggle datasets, and generating contextual text.</p>
 
     <section>
         <h2>Data Ingestion</h2>
@@ -244,12 +257,12 @@
                 <label class="upload-label" for="file-input">Select Files</label>
             </div>
             
-            <div class="data-source-card">
-                <h3>Cloud Storage</h3>
-                <i class="fas fa-cloud"></i>
-                <p style="font-size: 0.9em; color: #666;">Connect to GCP, AWS S3, or Azure Blob storage.</p>
-                <button onclick="alert('Integration logic for Cloud connection goes here.')">
-                    <i class="fas fa-link"></i> Connect Provider
+            <div class="data-source-card" id="aws-card">
+                <h3>AWS S3 Storage</h3>
+                <i class="fab fa-aws" style="color: #FF9900;"></i>
+                <p style="font-size: 0.9em; color: #333; font-weight: bold;">Connect to an AWS S3 bucket to pull training data.</p>
+                <button onclick="connectAwsS3()">
+                    <i class="fas fa-link"></i> Connect AWS S3
                 </button>
             </div>
             
@@ -265,7 +278,7 @@
 
         <div class="upload-container" id="drop-zone">
              <i class="fas fa-file-upload" style="font-size: 1.5em; color: #FFD700; margin-bottom: 5px;"></i>
-             <p style="margin: 0; font-weight: bold;">Drop files here to add them to the training corpus.</p>
+             <p style="margin: 0; font-weight: bold;">Drop files here or check AWS/Kaggle options above.</p>
              <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
              <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
              <div id="file-preview"></div>
@@ -304,6 +317,8 @@
     let transitionMatrix = {};
     let startWord = '';
     let allUploadedFiles = []; 
+    // Latency Threshold: 2 MB. Above this size, the browser may lag significantly.
+    const LATENCY_THRESHOLD_BYTES = 2048000; 
 
     const slider = document.getElementById('word-count');
     const display = document.getElementById('word-count-display');
@@ -315,7 +330,62 @@
     const textArea = document.getElementById('text-input');
     const fileAnalytics = document.getElementById('file-analytics');
 
-    // --- Utility Functions (Preserved) ---
+    // --- AWS S3 Integration Logic (Optional) ---
+
+    async function connectAwsS3() {
+        // Explicitly reminds the user of the GitHub Pages limitation.
+        const s3Url = prompt(
+            "Enter the full **Pre-Signed S3 URL** or **Public URL** of the file (.txt, .csv, .md).\n\n" +
+            "NOTE: This GitHub Pages front-end cannot securely handle private AWS credentials. " +
+            "A server-side component (e.g., AWS Lambda/API Gateway) is REQUIRED to generate a secure, temporary, pre-signed URL for a private S3 object."
+        );
+
+        if (!s3Url) {
+            alert("AWS S3 connection cancelled.");
+            return;
+        }
+
+        const isFileUrl = s3Url.toLowerCase().startsWith('http') && (s3Url.toLowerCase().endsWith('.txt') || s3Url.toLowerCase().endsWith('.csv') || s3Url.toLowerCase().endsWith('.md'));
+
+        if (isFileUrl) {
+            alert(`Attempting to fetch data from the provided S3 URL.\n\n(Assuming this URL is pre-signed or publicly accessible.)`);
+            await fetchDataFromCloud(s3Url);
+        } else {
+             alert(`Invalid URL format detected or connection aborted. Please enter a direct file URL.`);
+        }
+    }
+
+    async function fetchDataFromCloud(url) {
+        try {
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch data: HTTP error ${response.status}. This usually means the S3 Pre-Signed URL has expired or is invalid.`);
+            }
+
+            const text = await response.text();
+            
+            const mockFile = {
+                name: url.split('/').pop().split('?')[0] || 'aws_data.txt',
+                size: text.length,
+                text: () => Promise.resolve(text)
+            };
+            
+            allUploadedFiles.push(mockFile);
+            
+            textArea.value = (textArea.value.trim() + '\n' + text.trim()).trim();
+            renderFilePreviews();
+            
+            alert(`✅ Successfully fetched and appended data from S3 file: ${mockFile.name}!`);
+
+        } catch (error) {
+            console.error("Cloud Fetch Error:", error);
+            alert(`❌ Error fetching cloud data: ${error.message}`);
+        }
+    }
+
+
+    // --- Core File Handling with Latency Check ---
 
     function updateFileAnalytics() {
         const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -328,16 +398,12 @@
         allUploadedFiles.forEach(file => {
             const fileDiv = document.createElement('div');
             fileDiv.classList.add('file-item');
-            // Using a generic file icon from the icon library
             fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
             filePreview.appendChild(fileDiv);
         });
         updateFileAnalytics();
     }
 
-    // --- File Handling (Preserved) ---
-
-    // Handle drag and drop events (for visual feedback)
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropZone.classList.add('drag-over'); 
@@ -347,14 +413,12 @@
         dropZone.classList.remove('drag-over');
     });
 
-    // Handle file drop
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
         handleFiles(e.dataTransfer.files);
     });
 
-    // Handle file selection (button click)
     fileInput.addEventListener('change', (e) => {
         handleFiles(e.target.files);
         fileInput.value = null; 
@@ -363,15 +427,15 @@
     async function handleFiles(files) {
         if (!files.length) return;
 
+        let totalNewSize = 0;
         let allText = '';
         
-        // Add new files to the global tracker
         for (const file of files) {
             allUploadedFiles.push(file); 
+            totalNewSize += file.size; // Track size of the *new* batch
         }
 
-        // Only read the *new* files and append to the existing textarea content
-        for (const file of files) { // Note: Iterating over the *new* batch `files`
+        for (const file of files) { 
              try {
                 const text = await file.text();
                 allText += '\n' + text;
@@ -381,9 +445,16 @@
         }
         
         textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim();
-        
-        // Re-render the full list of file previews and update analytics
         renderFilePreviews();
+
+
+        // 📢 NEW: Latency Suggestion Logic 
+        if (totalNewSize > LATENCY_THRESHOLD_BYTES) {
+            const sizeInMB = (totalNewSize / 1048576).toFixed(2);
+            setTimeout(() => {
+                 alert(`⚠️ **High Latency Alert:** You uploaded ${sizeInMB} MB. Processing datasets this large in the browser can lead to significant lag or crashes. For better performance and to leverage cloud compute, consider using the **AWS S3 Storage** option for large files.`);
+            }, 100); // Small delay to ensure the file processing completes visually first
+        }
     }
 
     // --- Markov Matrix Computation & Analytics Display (Preserved) ---
