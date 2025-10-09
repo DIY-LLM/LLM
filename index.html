@@ -3,69 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Markov Text Generator with Analytics & Multi-File Upload</title>
+    <title>Sophisticated Markov Text Generator with Cloud Integration</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        /* --- Base & Typography --- */
         body {
-            font-family: Arial, sans-serif;
-            background-color: #FFFFE0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #FFFFE0; /* Pale Yellow Background */
             color: #333;
             margin: 0;
             padding: 20px;
         }
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto;
             background-color: #FFFFFF;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15); /* More pronounced shadow for depth */
         }
-        h1, h2 {
+        h1 {
             color: #FFD700;
-            border-bottom: 2px solid #FFD700;
-            padding-bottom: 10px;
+            border-bottom: 3px solid #FFD700;
+            padding-bottom: 15px;
+            font-weight: 300; /* Lighter font weight for sophistication */
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #8B4513; /* Brown for section headings */
+            font-weight: 400;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        /* --- Input & Control Elements --- */
+        textarea, #llm-output, #matrix-output {
+            font-family: 'Consolas', 'Courier New', monospace; /* Monospace for code/data feel */
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle inner shadow */
         }
         textarea {
-            width: 100%;
-            height: 150px;
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
+            height: 180px;
+            margin-bottom: 25px;
         }
+
+        /* Standard Button Style (reused for primary actions) */
         button {
             background-color: #FFD700;
             color: #333;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 25px;
             font-size: 16px;
-            margin: 4px 2px;
+            font-weight: bold;
             cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.3s;
+            border-radius: 6px;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         button:hover {
             background-color: #FFA500;
+            transform: translateY(-1px);
+        }
+        
+        /* --- Data Source Tabs/Cards --- */
+        .data-source-tabs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .data-source-card {
+            flex: 1 1 30%; /* Flexible cards in a row */
+            min-width: 250px;
+            padding: 20px;
+            background-color: #FFFACD; /* Lightest gold/yellow */
+            border-radius: 8px;
+            border: 2px solid #FFD700;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        .data-source-card h3 {
+            color: #8B4513;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        .data-source-card i {
+            font-size: 2em;
+            color: #FFD700;
+            margin-bottom: 10px;
+        }
+        .data-source-card button {
+            width: 100%;
+            margin-top: 10px;
         }
 
-        /* Stylized file upload area */
+        /* --- Local Upload (Drag and Drop) --- */
         .upload-container {
             border: 2px dashed #FFD700;
-            background-color: #FFFACD50; 
+            background-color: #fff8e1; /* Slightly darker than card background */
             border-radius: 6px;
             padding: 20px;
             text-align: center;
-            margin-bottom: 15px;
             position: relative;
-            transition: background-color 0.3s, border-color 0.3s, background-color 0.3s;
+            transition: background-color 0.3s, border-color 0.3s;
+            margin-top: 15px;
         }
-        /* New: Dragover Hover Effect */
         .upload-container.drag-over {
-            background-color: #FFF0B0 !important;
+            background-color: #FFF0B0;
             border-color: #FFA500;
         }
-        
         .upload-label {
             background-color: #FFD700;
             color: #333;
@@ -83,129 +135,165 @@
         #file-input {
             display: none; 
         }
-
-        /* File preview styling */
-        #file-preview {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #eee;
-            min-height: 20px; /* Ensure space for analytics or previews */
-        }
-        .file-item {
-            background-color: #FFFACD;
-            border: 1px solid #FFD700;
-            border-radius: 6px;
-            padding: 8px 12px;
-            font-size: 0.9em;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
-        /* File Analytics Style */
+        
+        /* --- File Analytics & Preview --- */
         #file-analytics {
-            margin-bottom: 10px;
-            padding: 8px;
-            background-color: #fff8e1;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #FFD70020; /* Transparent gold for subtle look */
+            border-left: 5px solid #FFD700;
             border-radius: 4px;
             font-size: 0.95em;
             color: #555;
-            border: 1px solid #FFD700;
+            text-align: left;
         }
         #file-analytics strong {
             color: #333;
         }
-
-        /* Analytics/Matrix output area */
-        #matrix-output {
-            margin-top: 20px;
-            padding: 15px;
+        #file-preview {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #FFD700;
+        }
+        .file-item {
             background-color: #FFFACD;
             border: 1px solid #FFD700;
-            border-radius: 4px;
-            min-height: 100px;
-            position: relative;
-            font-size: 1em;
+            border-radius: 15px; /* Pill shape */
+            padding: 5px 10px;
+            font-size: 0.85em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        /* --- Analytics/Matrix Output --- */
+        #matrix-output {
+            padding: 25px;
+            background-color: #FFFACD;
+            border-left: 5px solid #FFD700; /* Subtle border emphasis */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            min-height: 120px;
         }
         .analytic-item {
-            margin-bottom: 10px;
-            padding: 5px 0;
+            margin-bottom: 8px;
+            padding: 4px 0;
             border-bottom: 1px dotted #FFD700;
-        }
-        .analytic-item:last-child {
-            border-bottom: none;
         }
         .analytic-item strong {
             color: #8B4513; 
-            font-size: 1.1em;
         }
 
+        /* --- Generate Text --- */
         #llm-output {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px dashed #FFD700;
-            border-radius: 4px;
-            min-height: 50px;
+            padding: 20px;
+            border: 1px solid #FFD700;
+            background-color: #fff8e1;
         }
         .slider-container {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 10px 0;
+            border-top: 1px solid #eee;
         }
         input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
             width: 100%;
+            height: 8px;
+            background: #FFD70050; /* Transparent gold track */
+            border-radius: 4px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #FFA500;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         #word-count-display {
-            min-width: 40px;
-            text-align: center;
+            min-width: 50px;
+            font-weight: bold;
+            color: #8B4513;
         }
+        
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>Markov Text Generator</h1>
-    <p>Paste text or upload multiple files to build a Markov Transition Matrix and generate summaries.</p>
+    <h1><i class="fas fa-sitemap"></i> Markov Text Matrix Studio</h1>
+    <p>A sophisticated tool for training a Markov Model using local files, cloud storage, or public datasets, and generating contextual text.</p>
 
     <section>
-        <h2>Input Dataset</h2>
-        <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
+        <h2>Data Ingestion</h2>
+        <div class="data-source-tabs">
+            
+            <div class="data-source-card">
+                <h3>Local Files</h3>
+                <i class="fas fa-upload"></i>
+                <p style="font-size: 0.9em; color: #666;">Drag, drop, or select multiple local files to upload.</p>
+                <label class="upload-label" for="file-input">Select Files</label>
+            </div>
+            
+            <div class="data-source-card">
+                <h3>Cloud Storage</h3>
+                <i class="fas fa-cloud"></i>
+                <p style="font-size: 0.9em; color: #666;">Connect to GCP, AWS S3, or Azure Blob storage.</p>
+                <button onclick="alert('Integration logic for Cloud connection goes here.')">
+                    <i class="fas fa-link"></i> Connect Provider
+                </button>
+            </div>
+            
+            <div class="data-source-card">
+                <h3>Kaggle Dataset</h3>
+                <i class="fas fa-chart-bar"></i>
+                <p style="font-size: 0.9em; color: #666;">Pull data directly from a public Kaggle dataset.</p>
+                <button onclick="alert('Integration logic for Kaggle data pull goes here.')">
+                    <i class="fas fa-download"></i> Fetch from Kaggle
+                </button>
+            </div>
+        </div>
+
         <div class="upload-container" id="drop-zone">
-            <label class="upload-label" for="file-input">Choose Files (.txt, .csv, .md)</label>
-            <input type="file" id="file-input" multiple accept=".txt,.csv,.md"> 
-            <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Drag and drop files here or click to upload.</p>
-            <div id="file-preview"></div>
+             <i class="fas fa-file-upload" style="font-size: 1.5em; color: #FFD700; margin-bottom: 5px;"></i>
+             <p style="margin: 0; font-weight: bold;">Drop files here to add them to the training corpus.</p>
+             <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+             <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
+             <div id="file-preview"></div>
         </div>
 
-        <textarea id="text-input" placeholder="Paste or upload your text data here..."></textarea>
-        <button onclick="buildMatrix()">Build Matrix & Show Analytics</button>
+        <textarea id="text-input" placeholder="... or paste your text data directly here."></textarea>
+        <button onclick="buildMatrix()"><i class="fas fa-brain"></i> Build Matrix & Show Analytics</button>
     </section>
 
-    <hr>
+    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
 
     <section>
-        <h2>Matrix Analytics (Conceptual)</h2>
+        <h2>Matrix Analytics</h2>
         <div id="matrix-output">
-            <em>Analytics derived from the transition matrix will appear here after building.</em>
-            <div id="analytics-summary"></div>
+            <em>Analytics derived from the transition matrix will appear here after training.</em>
         </div>
     </section>
 
-    <hr>
+    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
 
     <section>
         <h2>Generate Text</h2>
         <div class="slider-container">
-            <label for="word-count">Output words:</label>
+            <label for="word-count"><i class="fas fa-sliders-h"></i> Output Word Count:</label>
             <input type="range" id="word-count" min="100" max="1000" value="500">
             <span id="word-count-display">500</span>
         </div>
-        <button onclick="generateText()">Generate LLM Output</button>
+        <button onclick="generateText()"><i class="fas fa-magic"></i> Generate Text Sequence</button>
         <div id="llm-output">
             <em>Generated text will appear here.</em>
         </div>
@@ -215,7 +303,6 @@
 <script>
     let transitionMatrix = {};
     let startWord = '';
-    // NEW: Array to track ALL files uploaded cumulatively
     let allUploadedFiles = []; 
 
     const slider = document.getElementById('word-count');
@@ -228,33 +315,32 @@
     const textArea = document.getElementById('text-input');
     const fileAnalytics = document.getElementById('file-analytics');
 
-    // --- Utility Functions ---
+    // --- Utility Functions (Preserved) ---
 
-    // NEW: Function to display file count and total size
     function updateFileAnalytics() {
         const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
         const sizeInKB = (totalSize / 1024).toFixed(1);
         fileAnalytics.innerHTML = `<strong>${allUploadedFiles.length}</strong> Files Uploaded (${sizeInKB} KB)`;
     }
 
-    // NEW: Function to clear the preview and re-render all tracked files
     function renderFilePreviews() {
         filePreview.innerHTML = '';
         allUploadedFiles.forEach(file => {
             const fileDiv = document.createElement('div');
             fileDiv.classList.add('file-item');
-            fileDiv.innerHTML = `📄 <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
+            // Using a generic file icon from the icon library
+            fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${(file.size / 1024).toFixed(1)} KB)`;
             filePreview.appendChild(fileDiv);
         });
         updateFileAnalytics();
     }
 
-    // --- File Handling (Multi-Upload & Drag/Drop) ---
+    // --- File Handling (Preserved) ---
 
     // Handle drag and drop events (for visual feedback)
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        dropZone.classList.add('drag-over'); // Responsive feedback on dragover
+        dropZone.classList.add('drag-over'); 
         e.dataTransfer.dropEffect = 'copy';
     });
     dropZone.addEventListener('dragleave', () => {
@@ -271,51 +357,36 @@
     // Handle file selection (button click)
     fileInput.addEventListener('change', (e) => {
         handleFiles(e.target.files);
-        // Reset the input value so the same file(s) can be selected again
         fileInput.value = null; 
     });
 
     async function handleFiles(files) {
         if (!files.length) return;
 
-        let allText = textArea.value.trim();
+        let allText = '';
         
         // Add new files to the global tracker
         for (const file of files) {
             allUploadedFiles.push(file); 
         }
 
-        // Process ALL files in the global tracker to rebuild the textarea content
-        // This is done to ensure the textarea content is always synchronized with the tracked files.
-        allText = ''; // Start fresh text content
-        for (const file of allUploadedFiles) {
-            try {
-                // Since File objects can only be read once directly from the input,
-                // we'll rely on the cumulative text append logic OR a new file read.
-                // For simplicity and directness, we will read the text for the newly added batch
-                // and append it to the existing textarea content.
-                // A more robust solution would track read text or use IndexedDB, but that's complex.
-                // Here, we only read the *new* files and append to the existing textarea content.
-                
-                // Find files in the batch that are new (simple check, assuming no file has the same name)
-                const isNewFile = Array.from(files).includes(file);
-                if (isNewFile) {
-                    const text = await file.text();
-                    allText += '\n' + text;
-                }
+        // Only read the *new* files and append to the existing textarea content
+        for (const file of files) { // Note: Iterating over the *new* batch `files`
+             try {
+                const text = await file.text();
+                allText += '\n' + text;
             } catch (e) {
                 console.error(`Error reading file ${file.name}:`, e);
             }
         }
         
-        // Append text from the newly processed batch to the existing textarea content
         textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim();
         
         // Re-render the full list of file previews and update analytics
         renderFilePreviews();
     }
 
-    // --- Markov Matrix Computation & Analytics Display (Logic remains the same) ---
+    // --- Markov Matrix Computation & Analytics Display (Preserved) ---
 
     function buildMatrix() {
         const text = textArea.value.toLowerCase();
@@ -324,7 +395,6 @@
             return;
         }
 
-        // Tokenization: Remove punctuation and split by whitespace
         const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
         transitionMatrix = {};
         let wordFrequencies = {};
@@ -342,7 +412,6 @@
             }
         }
 
-        // Calculate Analytics
         const uniqueWords = Object.keys(wordFrequencies).length;
         const totalWords = words.length;
         let maxFreq = 0;
@@ -355,7 +424,6 @@
             }
         }
 
-        // Find the word with the most outgoing transitions (highest entropy/variability)
         let maxOutgoing = 0;
         let mostVariableWord = 'N/A';
         for (const current in transitionMatrix) {
@@ -366,9 +434,8 @@
             }
         }
 
-        // Generate the Analytics Summary HTML
         document.getElementById('matrix-output').innerHTML = `
-            <h3>Dataset & Matrix Summary</h3>
+            <h3><i class="fas fa-chart-line"></i> Dataset & Matrix Summary</h3>
             <div class="analytic-item"><strong>Total Words:</strong> ${totalWords.toLocaleString()}</div>
             <div class="analytic-item"><strong>Unique Vocabulary Size:</strong> ${uniqueWords.toLocaleString()}</div>
             <div class="analytic-item"><strong>Total Transitions Mapped:</strong> ${totalTransitions.toLocaleString()}</div>
@@ -376,12 +443,13 @@
             <div class="analytic-item"><strong>Most Variable Word (Highest Out-Degree):</strong> <strong>${mostVariableWord}</strong> (Leads to ${maxOutgoing} different words)</div>
             <div class="analytic-item"><strong>Average Next-Word Options:</strong> ${(totalTransitions / uniqueWords).toFixed(2)}</div>
             <div style="margin-top: 15px; font-size: 0.9em; color: #888;">
-                <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here using a library like Chart.js.)</em></p>
+                <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here.)</em></p>
             </div>
         `;
     }
 
-    // --- Generate Text (Logic remains the same) ---
+    // --- Generate Text (Preserved) ---
+
     function generateText() {
         if (!startWord || Object.keys(transitionMatrix).length === 0) {
             document.getElementById('llm-output').textContent = 'Build the matrix first!';
