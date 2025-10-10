@@ -4,155 +4,193 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIY LLM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        /* --- Base & Typography --- */
+        /* --- Material Design Base & Typography --- */
+        :root {
+            /* Google's primary colors */
+            --google-blue: #4285F4;
+            --google-red: #DB4437;
+            --google-yellow: #F4B400;
+            --google-green: #0F9D58;
+            /* Material surface colors */
+            --surface-color: #FFFFFF;
+            --background-color: #F8F9FA; /* Light grey background */
+            --text-color: #202124;
+            --secondary-text: #5F6368;
+            --border-color: #DADCE0;
+            --elevation-low: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+            --elevation-mid: 0 4px 8px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.08);
+            --elevation-high: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #FFFFE0; /* Pale Yellow Background */
-            color: #333;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: 0;
+        }
+
+        /* App Bar/Header (Material style) */
+        .app-header {
+            background-color: var(--surface-color);
+            box-shadow: var(--elevation-low);
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .app-header h1 {
+            color: var(--google-blue);
+            font-weight: 300;
+            font-size: 2em;
+            margin: 0;
+            padding: 0;
+            border: none;
+        }
+        .app-header h1 i {
+            color: var(--google-green); /* Use a Google color for the icon */
         }
         .container {
             max-width: 1000px;
             margin: 0 auto;
-            background-color: #FFFFFF;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-        }
-        h1 {
-            color: #FFD700;
-            border-bottom: 3px solid #FFD700;
-            padding-bottom: 15px;
-            font-weight: 300; 
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #8B4513; 
-            font-weight: 400;
-            margin-top: 0;
-            margin-bottom: 15px;
+            padding: 0 20px 40px;
         }
         
-        /* --- Input & Control Elements --- */
+        h2 {
+            color: var(--text-color); 
+            font-weight: 400;
+            font-size: 1.5em;
+            margin-top: 30px;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        p {
+            color: var(--secondary-text);
+        }
+        
+        /* --- Material Input & Control Elements --- */
         textarea, #llm-output, #matrix-output {
-            font-family: 'Consolas', 'Courier New', monospace; 
+            font-family: 'Roboto Mono', 'Consolas', monospace; /* Google's monospace font or fallback */
             width: 100%;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
             box-sizing: border-box;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+            background-color: var(--surface-color);
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
         textarea {
-            height: 180px;
-            margin-bottom: 25px;
+            height: 150px;
+            margin-bottom: 20px;
+        }
+        textarea:focus {
+            border-color: var(--google-blue);
+            box-shadow: 0 0 0 1px var(--google-blue);
+            outline: none;
         }
 
-        /* Standard Button Style */
+        /* Material Contained Button Style */
         button {
-            background-color: #FFD700;
-            color: #333;
+            background-color: var(--google-blue);
+            color: var(--surface-color);
             border: none;
-            padding: 12px 25px;
-            font-size: 16px;
-            font-weight: bold;
+            padding: 10px 24px;
+            font-size: 15px;
+            font-weight: 500;
+            text-transform: uppercase;
             cursor: pointer;
-            border-radius: 6px;
-            transition: background-color 0.3s, transform 0.1s;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            transition: background-color 0.3s, box-shadow 0.3s, transform 0.1s;
+            box-shadow: 0 2px 2px 0 rgba(0,0,0,0.14), 0 3px 1px -2px rgba(0,0,0,0.12), 0 1px 5px 0 rgba(0,0,0,0.20);
         }
         button:hover {
-            background-color: #FFA500;
-            transform: translateY(-1px);
+            background-color: #3B7DD1; /* Darker blue */
+            box-shadow: 0 4px 4px 0 rgba(0,0,0,0.18), 0 5px 2px -2px rgba(0,0,0,0.16), 0 2px 8px 0 rgba(0,0,0,0.24);
+        }
+        button i {
+            margin-right: 8px;
         }
         
-        /* --- Data Source Tabs/Cards --- */
+        /* --- Data Source Cards (Elevated Surfaces) --- */
         .data-source-tabs {
             display: flex;
-            gap: 15px;
+            gap: 20px;
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
         .data-source-card {
-            flex: 1 1 30%; 
-            min-width: 250px;
-            padding: 20px;
-            background-color: #FFFACD; 
+            flex: 1 1 300px; 
+            padding: 24px;
+            background-color: var(--surface-color);
             border-radius: 8px;
-            border: 2px solid #FFD700;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            box-shadow: var(--elevation-low); /* Material shadow */
             text-align: center;
-            transition: border-color 0.3s;
+            transition: box-shadow 0.3s, transform 0.3s;
         }
-        /* Styling specific to the AWS card for visual differentiation */
-        #aws-card {
-            border-color: #FF9900;
-            background-color: #FFFACD;
+        .data-source-card:hover {
+            box-shadow: var(--elevation-mid);
+        }
+
+        /* Styling specific to AWS card */
+        #aws-card i {
+            color: #FF9900 !important;
         }
         #aws-card button {
-            background-color: #FF9900;
-            color: white;
+            background-color: #FF9900; /* AWS Orange */
         }
         #aws-card button:hover {
-            background-color: #FFA500;
+            background-color: #E68A00;
         }
         
         .data-source-card h3 {
-            color: #8B4513;
+            color: var(--text-color);
+            font-weight: 500;
+            font-size: 1.1em;
             margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.2em;
+            margin-bottom: 12px;
         }
         .data-source-card i {
-            font-size: 2em;
-            color: #FFD700;
-            margin-bottom: 10px;
-        }
-        /* Fallback for Font Awesome icons if the CDN fails */
-        .data-source-card i::before {
-            font-family: sans-serif;
-            font-style: normal;
-        }
-        .data-source-card .fa-upload::before { content: "⬆️"; }
-        .data-source-card .fa-aws::before { content: "☁️"; color: #FF9900 !important;}
-        .data-source-card .fa-chart-bar::before { content: "📊"; }
-
-        .data-source-card button {
-            width: 100%;
-            margin-top: 10px;
+            font-size: 2.5em;
+            color: var(--google-blue);
+            margin-bottom: 16px;
         }
 
-        /* --- Local Upload (Drag and Drop) --- */
+        /* --- Local Upload (Contained Drop Zone) --- */
         .upload-container {
-            border: 2px dashed #FFD700;
-            background-color: #fff8e1;
-            border-radius: 6px;
-            padding: 20px;
+            border: 2px dashed var(--border-color);
+            background-color: #FFFFFF;
+            border-radius: 8px;
+            padding: 30px;
             text-align: center;
-            position: relative;
+            margin-top: 20px;
             transition: background-color 0.3s, border-color 0.3s;
-            margin-top: 15px;
         }
         .upload-container.drag-over {
-            background-color: #FFF0B0;
-            border-color: #FFA500;
+            background-color: #E8F0FE; /* Light blue tint */
+            border-color: var(--google-blue);
+        }
+        .upload-container i.fa-file-upload {
+            font-size: 2em;
+            color: var(--google-blue);
+            margin-bottom: 10px;
         }
         .upload-label {
-            background-color: #FFD700;
-            color: #333;
-            padding: 10px 20px;
+            /* Material Outlined/Text Button style for file input */
+            color: var(--google-blue);
+            border: 1px solid var(--google-blue);
+            padding: 8px 16px;
             border-radius: 4px;
-            font-weight: bold;
+            font-weight: 500;
             cursor: pointer;
             display: inline-block;
-            font-size: 16px;
+            font-size: 15px;
             transition: background-color 0.3s;
+            margin-top: 15px;
         }
         .upload-label:hover {
-            background-color: #FFA500;
+            background-color: #E8F0FE;
         }
         #file-input {
             display: none; 
@@ -160,39 +198,18 @@
         
         /* --- File Analytics & Preview --- */
         #file-analytics {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #FFD70020;
-            border-left: 5px solid #FFD700;
+            margin-top: 20px;
+            padding: 12px;
+            background-color: #E8F0FE; /* Light blue hint background */
+            border-left: 4px solid var(--google-blue);
             border-radius: 4px;
-            font-size: 0.95em;
-            color: #555;
+            font-size: 0.9em;
+            color: var(--secondary-text);
             text-align: left;
         }
         #file-analytics strong {
-            color: #333;
+            color: var(--text-color);
         }
-        
-        /* STREAMING PROGRESS BAR STYLES */
-        .progress-bar-container {
-            width: 100%;
-            background-color: #eee;
-            border-radius: 4px;
-            margin-top: 8px;
-            overflow: hidden;
-            display: none; /* Hidden by default */
-        }
-        .progress-bar {
-            height: 15px;
-            background-color: #FF9900; /* AWS Orange */
-            width: 0%;
-            text-align: center;
-            line-height: 15px;
-            color: white;
-            font-size: 10px;
-            transition: width 0.3s ease-out;
-        }
-        
         #file-preview {
             display: flex;
             flex-wrap: wrap;
@@ -200,81 +217,99 @@
             gap: 8px;
             margin-top: 15px;
             padding-top: 10px;
-            border-top: 1px dashed #FFD700;
+            border-top: 1px solid var(--border-color);
         }
         .file-item {
-            background-color: #FFFACD;
-            border: 1px solid #FFD700;
-            border-radius: 15px; 
-            padding: 5px 10px;
+            background-color: #F1F3F4; /* Light chip background */
+            border: 1px solid #DADCE0;
+            border-radius: 16px; /* Pill shape */
+            padding: 6px 12px;
             font-size: 0.85em;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
+            color: var(--secondary-text);
         }
 
-        /* --- Analytics/Matrix Output --- */
+        /* --- Analytics/Matrix Output Card --- */
         #matrix-output {
-            padding: 25px;
-            background-color: #FFFACD;
-            border-left: 5px solid #FFD700;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 24px;
+            background-color: var(--surface-color);
+            box-shadow: var(--elevation-low);
+            border-left: 4px solid var(--google-green);
             min-height: 120px;
+            line-height: 1.6;
         }
         .analytic-item {
             margin-bottom: 8px;
             padding: 4px 0;
-            border-bottom: 1px dotted #FFD700;
+            border-bottom: 1px dotted #EEE;
+            color: var(--secondary-text);
         }
         .analytic-item strong {
-            color: #8B4513; 
+            color: var(--google-green); 
+            font-weight: 500;
+        }
+        #matrix-output h3 {
+             color: var(--google-green);
+             font-weight: 500;
+             margin-top: 0;
+             margin-bottom: 10px;
+        }
+        #matrix-output i {
+             margin-right: 8px;
         }
 
         /* --- Generate Text --- */
         #llm-output {
             padding: 20px;
-            border: 1px solid #FFD700;
-            background-color: #fff8e1;
+            border: 1px solid var(--border-color);
+            background-color: #F1F3F4; /* A light, clean output color */
+            margin-top: 20px;
         }
         .slider-container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 20px;
             margin-bottom: 25px;
-            padding: 10px 0;
-            border-top: 1px solid #eee;
+            padding: 15px 0;
+            border-top: 1px solid var(--border-color);
         }
         input[type="range"] {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
-            height: 8px;
-            background: #FFD70050;
-            border-radius: 4px;
+            height: 4px; /* Thin line */
+            background: #DADCE0;
+            border-radius: 2px;
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
-            width: 18px;
-            height: 18px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            background: #FFA500;
+            background: var(--google-blue); /* Primary color thumb */
             cursor: pointer;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
         #word-count-display {
             min-width: 50px;
-            font-weight: bold;
-            color: #8B4513;
+            font-weight: 500;
+            color: var(--google-blue);
         }
-        
+        .hr-material {
+            margin: 30px 0; 
+            border: none;
+            border-top: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
+<div class="app-header">
+    <h1><i class="fas fa-brain"></i> DIY LLM</h1>
+    <p style="font-size: 0.95em; margin-top: 8px; color: var(--secondary-text);">A sophisticated tool for training lightweight LLMs using local files, AWS S3, or public Kaggle datasets, and generating contextual text.</p>
+</div>
+
 <div class="container">
-    <h1><i class="fas fa-sitemap"></i> DIY LLM</h1>
-    <p>A sophisticated tool for training lightweight LLMs using local files, AWS S3, or public Kaggle datasets, and generating contextual text.</p>
 
     <section>
         <h2>Data Ingestion</h2>
@@ -282,15 +317,14 @@
             
             <div class="data-source-card">
                 <h3>Local Files</h3>
-                <i class="fas fa-upload"></i>
-                <p style="font-size: 0.9em; color: #666;">Drag, drop, or select multiple local files to upload.</p>
+                <i class="fas fa-cloud-upload-alt"></i> <p style="font-size: 0.9em;">Drag, drop, or select multiple local files to upload.</p>
                 <label class="upload-label" for="file-input">Select Files</label>
             </div>
             
             <div class="data-source-card" id="aws-card">
                 <h3>AWS S3 Storage</h3>
                 <i class="fab fa-aws" style="color: #FF9900;"></i>
-                <p style="font-size: 0.9em; color: #333; font-weight: bold;">Connect to an AWS S3 bucket to pull training data.</p>
+                <p style="font-size: 0.9em; font-weight: 500;">Connect to an AWS S3 bucket to pull training data.</p>
                 <button onclick="connectAwsS3()">
                     <i class="fas fa-link"></i> Connect AWS S3
                 </button>
@@ -298,17 +332,15 @@
             
             <div class="data-source-card">
                 <h3>Kaggle Dataset</h3>
-                <i class="fas fa-chart-bar"></i>
-                <p style="font-size: 0.9em; color: #666;">Pull data directly from a public Kaggle dataset.</p>
-                <button onclick="alert('Integration logic for Kaggle data pull goes here.')">
+                <i class="fas fa-database" style="color: var(--google-green);"></i> <p style="font-size: 0.9em;">Pull data directly from a public Kaggle dataset.</p>
+                <button onclick="alert('Integration logic for Kaggle data pull goes here.')" style="background-color: var(--google-green);">
                     <i class="fas fa-download"></i> Fetch from Kaggle
                 </button>
             </div>
         </div>
 
         <div class="upload-container" id="drop-zone">
-             <i class="fas fa-file-upload" style="font-size: 1.5em; color: #FFD700; margin-bottom: 5px;"></i>
-             <p style="margin: 0; font-weight: bold;">Drop files here or check AWS/Kaggle options above.</p>
+             <i class="fas fa-file-import"></i> <p style="margin: 0; font-weight: 500; color: var(--text-color);">Drop files here or check cloud options above.</p>
              <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
              <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
              <div id="progress-container" class="progress-bar-container">
@@ -318,10 +350,10 @@
         </div>
 
         <textarea id="text-input" placeholder="... or paste your text data directly here."></textarea>
-        <button onclick="buildMatrix()"><i class="fas fa-brain"></i> Build Matrix & Show Analytics</button>
+        <button onclick="buildMatrix()"><i class="fas fa-bolt"></i> Build Matrix & Show Analytics</button>
     </section>
 
-    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
+    <hr class="hr-material">
 
     <section>
         <h2>Matrix Analytics</h2>
@@ -330,7 +362,7 @@
         </div>
     </section>
 
-    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
+    <hr class="hr-material">
 
     <section>
         <h2>Generate Text</h2>
@@ -618,7 +650,7 @@
             <div class="analytic-item"><strong>Most Frequent Starting Word:</strong> <strong>${startWord || 'N/A'}</strong> (Occurs ${maxFreq.toLocaleString()} times)</div>
             <div class="analytic-item"><strong>Most Variable Word (Highest Out-Degree):</strong> <strong>${mostVariableWord}</strong> (Leads to ${maxOutgoing} different words)</div>
             <div class="analytic-item"><strong>Average Next-Word Options:</strong> ${(totalTransitions / uniqueWords).toFixed(2)}</div>
-            <div style="margin-top: 15px; font-size: 0.9em; color: #888;">
+            <div style="margin-top: 15px; font-size: 0.9em; color: var(--secondary-text);">
                 <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here.)</em></p>
             </div>
         `;
