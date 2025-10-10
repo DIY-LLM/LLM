@@ -132,6 +132,59 @@
         .metric-item { margin-bottom: 10px; font-size: 0.95em; }
         .metric-item strong { display: block; font-size: 1.1em; color: var(--text-color); }
         
+        /* NEW: Data Analytics Dashboard */
+        #data-analytics-dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .dashboard-card {
+            background-color: var(--surface-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: var(--elevation-low);
+        }
+        .dashboard-card h3 { 
+            margin-top: 0; 
+            font-size: 1.2em; 
+            color: var(--primary-blue);
+        }
+
+        /* NEW: Heatmap specific styles */
+        #transition-heatmap-content {
+            overflow-x: auto;
+            max-height: 350px;
+        }
+        #transition-heatmap-content table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75em;
+            table-layout: fixed;
+        }
+        #transition-heatmap-content th, #transition-heatmap-content td {
+            border: 1px solid #eee;
+            padding: 5px;
+            text-align: center;
+            transition: background-color 0.3s;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            height: 30px;
+        }
+        #transition-heatmap-content th {
+            background-color: #f7f7f7;
+            font-weight: 500;
+        }
+        .heatmap-cell {
+            cursor: default;
+            color: white; /* Text color will be white over colored background */
+            font-weight: 500;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+        
         /* Re-used Component Styles (from previous step) */
         .data-source-card, #matrix-output { background-color: var(--surface-color); border-radius: 8px; box-shadow: var(--elevation-low); padding: 20px; transition: box-shadow 0.3s; }
         .data-source-tabs { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -256,6 +309,26 @@
 
         <hr class="divider">
 
+        <!-- NEW: Data Analytics Section (Visualizes Tokenization) -->
+        <section id="data-analytics-section" style="display: none;">
+            <h2>Data Analytics & Visualization</h2>
+            <p style="font-size: 0.9em; margin-bottom: 25px;">These charts update after running the "Tokenize & Preprocess" step.</p>
+            <div id="data-analytics-dashboard">
+                <div id="token-chart-container" class="dashboard-card">
+                    <h3><i class="fas fa-chart-bar"></i> Top 10 Token Frequency</h3>
+                    <canvas id="tokenChart"></canvas>
+                </div>
+                <div id="heatmap-container" class="dashboard-card">
+                    <h3><i class="fas fa-th-large"></i> Transition/Attention Heatmap</h3>
+                    <div id="transition-heatmap-content">
+                        <em>Run tokenization to view Markov transition probabilities.</em>
+                    </div>
+                </div>
+            </div>
+            <hr class="divider">
+        </section>
+
+
         <section id="model-section">
             <h2>Model Configuration & Execution</h2>
 
@@ -335,12 +408,11 @@
 <script>
     // #region Phase 1: Modular Architecture & Config (config.json, app.js, utils.js)
 
-    // Simulating config.json (User adjustable via UI controls)
     const CONFIG = {
         modelMode: 'MARKOV', // 'MARKOV' or 'TRANSFORMER'
-        maxTokens: 500,      // Max tokens for generation
-        temperature: 0.8,    // Sampling temperature
-        embeddingDim: 64,    // d_model for the MiniTransformer
+        maxTokens: 500,
+        temperature: 0.8,
+        embeddingDim: 64,
         train: {
             epochs: 10,
             batchSize: 32,
@@ -349,7 +421,8 @@
     };
 
     let lossChart = null;
-    let currentStreamController = null; // For managing S3 streaming cancellation
+    let tokenChart = null;
+    let currentStreamController = null;
 
     // --- Utility Functions (utils.js) ---
 
@@ -360,7 +433,7 @@
     }
 
     /**
-     * Initializes the loss chart using Chart.js.
+     * Initializes the loss chart (Line Chart for Training Metrics).
      */
     function initializeLossChart() {
         const ctx = document.getElementById('lossChart').getContext('2d');
@@ -372,7 +445,7 @@
                 datasets: [{
                     label: 'Training Loss',
                     data: [],
-                    borderColor: 'rgb(26, 115, 232)', // Google Blue
+                    borderColor: 'rgb(26, 115, 232)',
                     backgroundColor: 'rgba(26, 115, 232, 0.1)',
                     tension: 0.4
                 }]
@@ -387,9 +460,38 @@
             }
         });
     }
+    
+    /**
+     * Initializes the token chart (Bar Chart for Data Analysis).
+     */
+    function initializeTokenChart() {
+        const ctx = document.getElementById('tokenChart').getContext('2d');
+        if (tokenChart) tokenChart.destroy();
+        tokenChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Token Count',
+                    data: [],
+                    backgroundColor: 'rgba(15, 157, 88, 0.6)', // Google Green
+                    borderColor: 'rgb(15, 157, 88)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                indexAxis: 'y', // Horizontal bars
+                scales: {
+                    x: { beginAtZero: true, title: { display: true, text: 'Frequency' } },
+                    y: { ticks: { autoSkip: false } }
+                }
+            }
+        });
+    }
 
     // --- Event System (Lightweight Observer Pattern) ---
-    // Instead of CustomEvent, we use a simple object for state management and UI updates.
     const state = new Proxy({
         mode: CONFIG.modelMode,
         vocabSize: 0,
@@ -406,8 +508,6 @@
 
     /**
      * Updates UI elements based on state changes.
-     * @param {string} prop - The property that changed.
-     * @param {*} value - The new value.
      */
     function updateUI(prop, value) {
         switch (prop) {
@@ -461,19 +561,17 @@
 
     /**
      * Phase 2 Deliverable: Placeholder Byte-Pair Encoding (BPE) or WordPiece Tokenizer.
-     * Uses a simple character-level tokenizer for the prototype, but with the required BPE API contract.
      */
     class Tokenizer {
         constructor() {
-            this.vocab = {}; // Map of token string to ID
+            this.vocab = {}; 
             this.idToToken = {};
+            this.tokenCounts = {}; // NEW: Store token frequencies
             this.nextId = 1;
-            this.BPE_MERGES = []; // Placeholder for BPE merge rules
         }
 
         /**
          * Cleans text (lower, punctuation removal)
-         * @param {string} text 
          */
         cleanText(text) {
             // Lowercase and remove punctuation except for spaces
@@ -481,23 +579,25 @@
         }
 
         /**
-         * Builds the vocabulary from the corpus (Mock BPE training)
-         * @param {string} corpus 
+         * Builds the vocabulary and token frequencies from the corpus (Mock BPE training)
          */
         train(corpus) {
             const cleanedCorpus = this.cleanText(corpus);
-            const characters = Array.from(new Set(cleanedCorpus.split('')));
+            const words = cleanedCorpus.split(/\s+/).filter(w => w.length > 0);
+            
+            // Reset state
             this.vocab = {};
             this.idToToken = {};
+            this.tokenCounts = {};
             this.nextId = 1;
 
-            // Simple char-level tokenization for mock BPE
-            characters.forEach(char => {
-                if (char.trim() !== '' && !this.vocab[char]) {
-                    this.vocab[char] = this.nextId;
-                    this.idToToken[this.nextId] = char;
+            words.forEach(word => {
+                if (!this.vocab[word]) {
+                    this.vocab[word] = this.nextId;
+                    this.idToToken[this.nextId] = word;
                     this.nextId++;
                 }
+                this.tokenCounts[word] = (this.tokenCounts[word] || 0) + 1;
             });
 
             state.vocabSize = Object.keys(this.vocab).length;
@@ -506,24 +606,19 @@
 
         /**
          * Encodes text into an array of token IDs. (Tokenizer API Deliverable)
-         * @param {string} text 
-         * @returns {number[]} array of token IDs
          */
         encode(text) {
             if (state.vocabSize === 0) return [];
             const cleanedText = this.cleanText(text);
-            
-            // In a real BPE/WordPiece, this would apply merges. Here it's char-level.
-            return Array.from(cleanedText).map(char => this.vocab[char] || this.vocab[' ']).filter(id => id);
+            const words = cleanedText.split(/\s+/).filter(w => w.length > 0);
+            return words.map(word => this.vocab[word] || this.vocab[' ']).filter(id => id);
         }
 
         /**
          * Decodes an array of token IDs into a string. (Tokenizer API Deliverable)
-         * @param {number[]} token_ids 
-         * @returns {string}
          */
         decode(token_ids) {
-            return token_ids.map(id => this.idToToken[id] || '[UNK]').join('');
+            return token_ids.map(id => this.idToToken[id] || '[UNK]').join(' ');
         }
         
         /**
@@ -545,7 +640,6 @@
 
     /**
      * Phase 2 Deliverable: Data Ingestion and Preprocessing Class
-     * Handles file loading, streaming, and coordinating with the tokenizer.
      */
     class DataHandler {
         constructor(tokenizer) {
@@ -562,27 +656,88 @@
                 return;
             }
             
-            // 1. Train/Update Tokenizer
+            // 1. Train/Update Tokenizer (Calculates counts)
             this.tokenizer.train(corpus);
             
-            // 2. Build Markov Matrix (Always run as a fallback, even in TF mode)
+            // 2. Build Markov Matrix 
             this.markovMatrix = this._buildMarkovMatrix(corpus);
 
-            // 3. Update Analytics
-            document.getElementById('matrix-output').innerHTML = `
-                <h3><i class="fas fa-list-ol"></i> Tokenization Summary</h3>
-                <div class="analytic-item"><strong>Tokenizer Mode:</strong> Mock Char-Level (BPE API)</div>
-                <div class="analytic-item"><strong>Vocabulary Size:</strong> ${state.vocabSize.toLocaleString()} tokens</div>
-                <div class="analytic-item"><strong>Corpus Length:</strong> ${corpus.length.toLocaleString()} characters</div>
-                <div style="margin-top: 15px;">
-                    <p><em>Markov Fallback Matrix Ready. Ready for Transformer Training or Markov Generation.</em></p>
-                </div>
-            `;
+            // 3. Update Visualizations (NEW)
+            this.renderTokenChart(this.tokenizer.tokenCounts);
+            this.renderTransitionHeatmap(this.markovMatrix);
+            document.getElementById('data-analytics-section').style.display = 'block';
+
+            // 4. Update Analytics
+            document.getElementById('file-analytics-card').style.borderLeft = '4px solid var(--primary-blue)';
+            document.getElementById('file-analytics-card').querySelector('h3').textContent = 'Processing Complete';
         }
         
+        // NEW: Renders the bar chart for token frequencies
+        renderTokenChart(tokenCounts) {
+            initializeTokenChart();
+            
+            const sortedTokens = Object.entries(tokenCounts)
+                .sort(([, countA], [, countB]) => countB - countA)
+                .slice(0, 10); // Top 10
+
+            tokenChart.data.labels = sortedTokens.map(([token]) => token);
+            tokenChart.data.datasets[0].data = sortedTokens.map(([, count]) => count);
+            tokenChart.update();
+        }
+
+        // NEW: Renders the heatmap for Markov transition probabilities
+        renderTransitionHeatmap(matrix, limit = 5) {
+            const container = document.getElementById('transition-heatmap-content');
+            
+            // Get the 'limit' most frequent starting words (keys in the matrix)
+            const topWords = Object.entries(this.tokenizer.tokenCounts)
+                                .sort(([, a], [, b]) => b - a)
+                                .slice(0, limit)
+                                .map(([word]) => word);
+            
+            if (topWords.length < 2) {
+                container.innerHTML = `<em>Not enough unique tokens (${topWords.length}) to generate a meaningful transition map.</em>`;
+                return;
+            }
+
+            let html = '<table><thead><tr><th>&rarr;</th>';
+            // Header row (following words)
+            topWords.forEach(word => {
+                html += `<th>${word}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            // Body rows (starting words)
+            topWords.forEach(startWord => {
+                html += `<tr><th>${startWord}</th>`;
+                topWords.forEach(nextWord => {
+                    const counts = matrix[startWord] || {};
+                    const totalTransitions = Object.values(counts).reduce((a, b) => a + b, 0);
+                    const count = counts[nextWord] || 0;
+                    const probability = totalTransitions > 0 ? (count / totalTransitions) : 0;
+                    
+                    // Convert probability (0 to 1) to a hue (e.g., green scale)
+                    // HSL (0, 100%, 50%) is red, HSL (120, 100%, 50%) is green.
+                    // We will use a blue/white scale for professionalism
+                    const alpha = probability * 0.9 + 0.1; // Ensure background is visible
+                    const color = `rgba(26, 115, 232, ${alpha})`; // Blue/Primary color scale
+                    const text = probability.toFixed(2);
+                    
+                    html += `<td class="heatmap-cell" style="background-color: ${color};" title="P('${startWord}' -> '${nextWord}') = ${text}">
+                                ${text}
+                            </td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+
         // Old Markov function, now internal and moved to DataHandler
         _buildMarkovMatrix(text) {
-            const words = text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
+            const words = this.tokenizer.cleanText(text).split(/\s+/).filter(w => w.length > 0);
             let matrix = {};
             for (let i = 0; i < words.length - 1; i++) {
                 const current = words[i];
@@ -594,9 +749,6 @@
         }
 
         // --- File/Streaming Handlers (Kept from previous step) ---
-        // (handleFiles, connectAwsS3, fetchDataFromCloud, cancelStreaming, updateFileAnalyticsSummary, renderFilePreviews, removeFile)
-        // Note: These handlers use the external `showAlert` and update `this.allUploadedFiles`.
-
         updateFileAnalyticsSummary() {
             const totalSize = this.allUploadedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
             const sizeInMB = (totalSize / 1048576).toFixed(2);
@@ -788,7 +940,6 @@
 
     /**
      * Phase 3 Deliverable: MiniTransformer Class
-     * Simulates a single-layer transformer using TensorFlow.js for the core math.
      */
     class MiniTransformer {
         constructor(tokenizer) {
@@ -800,16 +951,13 @@
         // Mock Web Worker function (Phase 3 requirement)
         _offloadTensorOperation(operation, ...args) {
             return new Promise(resolve => {
-                // In a real app, this would use a Web Worker postMessage()
                 setTimeout(() => {
                     showAlert(`TensorFlow operation offloaded to a mock Web Worker. Running ${operation}...`, 'Worker Status');
-                    // Simulate execution based on the operation
                     if (operation === 'train') {
-                        // Resolve with mock loss history
                         let mockLoss = Array(CONFIG.train.epochs).fill(0).map((_, i) => 0.5 * Math.exp(-i / 5));
                         resolve({ success: true, lossHistory: mockLoss });
                     } else {
-                        resolve(null); // Simple success for other tasks
+                        resolve(null); 
                     }
                 }, 100); 
             });
@@ -819,7 +967,7 @@
          * Builds a minimal, dense-layer model structure using TF.js
          */
         buildModel() {
-            if (this.tokenizer.vocab.length === 0) {
+            if (state.vocabSize === 0) {
                  showAlert('Cannot build model: Tokenizer vocabulary is empty. Run Tokenize & Preprocess first.', 'Model Error');
                  return;
             }
@@ -828,18 +976,18 @@
 
             this.model = tf.sequential();
             
-            // 1. Embedding Layer (Input & Positional Encoding simulation)
+            // 1. Embedding Layer 
             this.model.add(tf.layers.embedding({
-                inputDim: vocabSize + 1, // +1 for UNK token or padding
+                inputDim: vocabSize + 1, 
                 outputDim: embedDim,
-                inputLength: 10, // Max sequence length (placeholder)
+                inputLength: 10, 
                 name: 'embedding'
             }));
 
             // 2. Mock Self-Attention (Simplified Dense Layer for architecture demonstration)
             this.model.add(tf.layers.dense({ 
                 units: embedDim, 
-                activation: 'gelu', // GELU activation (Phase 3 requirement)
+                activation: 'gelu', 
                 name: 'attention_mock_layer'
             })); 
 
@@ -862,19 +1010,20 @@
 
         /**
          * Trains the model on the text corpus (Phase 3 Deliverable).
-         * @param {string} corpus 
          */
         async trainOnText(corpus) {
-            if (!this.model) {
-                this.buildModel();
+            if (state.vocabSize === 0) {
+                showAlert('Cannot train: Tokenizer vocabulary is empty. Run Tokenize & Preprocess first.', 'Training Error');
+                return;
             }
-            if (this.model.isDisposed()) {
+
+            if (!this.model || this.model.isDisposed()) {
                 this.buildModel();
             }
 
             // Mock Training Data Generation (since real data preparation is complex)
-            const inputTensor = tf.randomUniform([CONFIG.train.batchSize, 10, CONFIG.embeddingDim]); // Batch, SeqLen, EmbedDim
-            const outputTensor = tf.randomUniform([CONFIG.train.batchSize, CONFIG.embeddingDim, state.vocabSize]); // Batch, EmbedDim, VocabSize
+            const inputTensor = tf.randomUniform([CONFIG.train.batchSize, 10, CONFIG.embeddingDim]); 
+            const outputTensor = tf.randomUniform([CONFIG.train.batchSize, CONFIG.embeddingDim, state.vocabSize]); 
 
             const { success, lossHistory } = await this._offloadTensorOperation('train', inputTensor, outputTensor);
 
@@ -882,6 +1031,9 @@
                 this.isTrained = true;
                 
                 // Update Chart
+                lossChart.data.labels = [];
+                lossChart.data.datasets[0].data = [];
+                
                 lossHistory.forEach((loss, index) => {
                     state.currentLoss = loss;
                     state.epochsRun = index + 1;
@@ -899,9 +1051,6 @@
 
         /**
          * Generates text based on the Transformer model (Phase 3 Deliverable).
-         * @param {string} prompt 
-         * @param {number} maxTokens 
-         * @param {number} temperature 
          */
         async generate(prompt, maxTokens, temperature) {
             if (!this.model || !this.isTrained) {
@@ -910,21 +1059,14 @@
 
             const startTime = performance.now();
             
-            // 1. Encode prompt (using our Tokenizer API)
-            const promptIds = this.tokenizer.encode(prompt).slice(-10); // Use last 10 tokens
-
-            // 2. Mock Prediction (simplified sequence prediction)
+            const promptIds = this.tokenizer.encode(prompt).slice(-10); 
             let currentIds = [...promptIds];
             const maxSeq = 10;
             
             for (let i = 0; i < maxTokens; i++) {
-                const inputTensor = tf.tensor1d(currentIds.slice(-maxSeq).map(id => id), 'int32').expandDims(0);
-                
-                // Mock forward pass: use the last token ID as input for the next step's prediction
                 const lastTokenId = currentIds[currentIds.length - 1];
                 const inputForNext = tf.oneHot(lastTokenId, state.vocabSize).expandDims(0);
                 
-                // Run a mock predict using a small dense layer to simulate output projection
                 const mockOutput = tf.layers.dense({ 
                     units: state.vocabSize, 
                     activation: 'softmax' 
@@ -932,28 +1074,24 @@
 
                 const nextTokenId = tf.tidy(() => {
                     const logits = mockOutput.squeeze();
-                    // Apply temperature sampling (soft sampling for prototype)
                     const sampled = tf.div(tf.log(logits), temperature).softmax();
                     return tf.multinomial(sampled, 1).dataSync()[0];
                 });
                 
                 currentIds.push(nextTokenId);
-                tf.dispose([inputTensor, mockOutput]);
+                tf.dispose([inputForNext, mockOutput]);
 
-                if (i > maxTokens - 2) break; // End loop
+                if (i > maxTokens - 2) break;
             }
 
             const endTime = performance.now();
             state.latency = `${(endTime - startTime).toFixed(2)} ms`;
             
-            // 3. Decode result
             return this.tokenizer.decode(currentIds);
         }
 
         saveModel() {
             if (this.model) {
-                // In a real scenario, this would save to IndexedDB or S3
-                // Here, we just simulate the operation and report memory.
                 const memory = tf.memory();
                 const modelSizeMB = (memory.numBytes / 1048576).toFixed(2);
                 document.getElementById('metric-memory').textContent = `${modelSizeMB} MB`;
@@ -964,7 +1102,6 @@
         }
 
         loadModel() {
-            // Mock load operation
             this.buildModel();
             this.isTrained = true;
             state.epochsRun = 10;
@@ -998,6 +1135,7 @@
                 const endTime = performance.now();
                 state.latency = `${(endTime - startTime).toFixed(2)} ms`;
             } else if (state.mode === 'TRANSFORMER') {
+                 if (state.vocabSize === 0) throw new Error("Tokenizer data is missing. Run Tokenize & Preprocess.");
                 outputText = await miniTransformer.generate(prompt, maxTokens, temperature);
             } else {
                 outputText = 'Invalid model mode selected.';
@@ -1019,7 +1157,7 @@
         let generated = [...words];
 
         if (!currentWord || !matrix[currentWord]) {
-             return '[MARKOV ERROR] Prompt word not found in corpus, or corpus is too small.';
+             return '[MARKOV ERROR] Prompt word not found in corpus, or corpus is too small. Try a common word like "the" or "a".';
         }
 
         for (let i = 0; i < maxWords; i++) {
@@ -1044,7 +1182,8 @@
 
     // Initial setup on load
     window.onload = () => {
-        initializeLossChart(); // Ensure chart is ready even if hidden
+        initializeLossChart(); 
+        initializeTokenChart(); // Initialize token chart too
         dataHandler.updateFileAnalyticsSummary();
         // Hide Transformer elements initially
         document.getElementById('model-controls-panel').style.display = 'none';
@@ -1054,3 +1193,4 @@
 </script>
 </body>
 </html>
+
