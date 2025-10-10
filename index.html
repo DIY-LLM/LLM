@@ -1,653 +1,662 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIY LLM</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
-        /* --- Base & Typography --- */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #FFFFE0; /* Pale Yellow Background */
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background-color: #FFFFFF;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-        }
-        h1 {
-            color: #FFD700;
-            border-bottom: 3px solid #FFD700;
-            padding-bottom: 15px;
-            font-weight: 300; 
-            margin-bottom: 30px;
-        }
-        h2 {
-            color: #8B4513; 
-            font-weight: 400;
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        
-        /* --- Input & Control Elements --- */
-        textarea, #llm-output, #matrix-output {
-            font-family: 'Consolas', 'Courier New', monospace; 
-            width: 100%;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-sizing: border-box;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-        textarea {
-            height: 180px;
-            margin-bottom: 25px;
-        }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIY LLM</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* --- Base & Typography --- */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #FFFFE0; /* Pale Yellow Background */
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #FFFFFF;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+        h1 {
+            color: #FFD700;
+            border-bottom: 3px solid #FFD700;
+            padding-bottom: 15px;
+            font-weight: 300; 
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #8B4513; 
+            font-weight: 400;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        /* --- Input & Control Elements --- */
+        textarea, #llm-output, #matrix-output {
+            font-family: 'Consolas', 'Courier New', monospace; 
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        textarea {
+            height: 180px;
+            margin-bottom: 25px;
+        }
 
-        /* Standard Button Style */
-        button {
-            background-color: #FFD700;
-            color: #333;
-            border: none;
-            padding: 12px 25px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            border-radius: 6px;
-            transition: background-color 0.3s, transform 0.1s;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-        button:hover {
-            background-color: #FFA500;
-            transform: translateY(-1px);
-        }
-        
-        /* --- Data Source Tabs/Cards --- */
-        .data-source-tabs {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .data-source-card {
-            flex: 1 1 30%; 
-            min-width: 250px;
-            padding: 20px;
-            background-color: #FFFACD; 
-            border-radius: 8px;
-            border: 2px solid #FFD700;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-            text-align: center;
-            transition: border-color 0.3s;
-        }
-        /* Styling specific to the AWS card for visual differentiation */
-        #aws-card {
-            border-color: #FF9900;
-            background-color: #FFFACD;
-        }
-        #aws-card button {
-            background-color: #FF9900;
-            color: white;
-        }
-        #aws-card button:hover {
-            background-color: #FFA500;
-        }
-        
-        .data-source-card h3 {
-            color: #8B4513;
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }
-        .data-source-card i {
-            font-size: 2em;
-            color: #FFD700;
-            margin-bottom: 10px;
-        }
-        .data-source-card button {
-            width: 100%;
-            margin-top: 10px;
-        }
+        /* Standard Button Style */
+        button {
+            background-color: #FFD700;
+            color: #333;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        button:hover {
+            background-color: #FFA500;
+            transform: translateY(-1px);
+        }
+        
+        /* --- Data Source Tabs/Cards --- */
+        .data-source-tabs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .data-source-card {
+            flex: 1 1 30%; 
+            min-width: 250px;
+            padding: 20px;
+            background-color: #FFFACD; 
+            border-radius: 8px;
+            border: 2px solid #FFD700;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        /* Styling specific to the AWS card for visual differentiation */
+        #aws-card {
+            border-color: #FF9900;
+            background-color: #FFFACD;
+        }
+        #aws-card button {
+            background-color: #FF9900;
+            color: white;
+        }
+        #aws-card button:hover {
+            background-color: #FFA500;
+        }
+        
+        .data-source-card h3 {
+            color: #8B4513;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        .data-source-card i {
+            font-size: 2em;
+            color: #FFD700;
+            margin-bottom: 10px;
+        }
+        /* Fallback for Font Awesome icons if the CDN fails */
+        .data-source-card i::before {
+            font-family: sans-serif;
+            font-style: normal;
+        }
+        .data-source-card .fa-upload::before { content: "⬆️"; }
+        .data-source-card .fa-aws::before { content: "☁️"; color: #FF9900 !important;}
+        .data-source-card .fa-chart-bar::before { content: "📊"; }
 
-        /* --- Local Upload (Drag and Drop) --- */
-        .upload-container {
-            border: 2px dashed #FFD700;
-            background-color: #fff8e1;
-            border-radius: 6px;
-            padding: 20px;
-            text-align: center;
-            position: relative;
-            transition: background-color 0.3s, border-color 0.3s;
-            margin-top: 15px;
-        }
-        .upload-container.drag-over {
-            background-color: #FFF0B0;
-            border-color: #FFA500;
-        }
-        .upload-label {
-            background-color: #FFD700;
-            color: #333;
-            padding: 10px 20px;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
-            display: inline-block;
-            font-size: 16px;
-            transition: background-color 0.3s;
-        }
-        .upload-label:hover {
-            background-color: #FFA500;
-        }
-        #file-input {
-            display: none; 
-        }
-        
-        /* --- File Analytics & Preview --- */
-        #file-analytics {
-            margin-top: 15px;
-            padding: 10px;
-            background-color: #FFD70020;
-            border-left: 5px solid #FFD700;
-            border-radius: 4px;
-            font-size: 0.95em;
-            color: #555;
-            text-align: left;
-        }
-        #file-analytics strong {
-            color: #333;
-        }
-        
-        /* STREAMING PROGRESS BAR STYLES */
-        .progress-bar-container {
-            width: 100%;
-            background-color: #eee;
-            border-radius: 4px;
-            margin-top: 8px;
-            overflow: hidden;
-            display: none; /* Hidden by default */
-        }
-        .progress-bar {
-            height: 15px;
-            background-color: #FF9900; /* AWS Orange */
-            width: 0%;
-            text-align: center;
-            line-height: 15px;
-            color: white;
-            font-size: 10px;
-            transition: width 0.3s ease-out;
-        }
-        
-        #file-preview {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: flex-start;
-            gap: 8px;
-            margin-top: 15px;
-            padding-top: 10px;
-            border-top: 1px dashed #FFD700;
-        }
-        .file-item {
-            background-color: #FFFACD;
-            border: 1px solid #FFD700;
-            border-radius: 15px; 
-            padding: 5px 10px;
-            font-size: 0.85em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-        }
+        .data-source-card button {
+            width: 100%;
+            margin-top: 10px;
+        }
 
-        /* --- Analytics/Matrix Output --- */
-        #matrix-output {
-            padding: 25px;
-            background-color: #FFFACD;
-            border-left: 5px solid #FFD700;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            min-height: 120px;
-        }
-        .analytic-item {
-            margin-bottom: 8px;
-            padding: 4px 0;
-            border-bottom: 1px dotted #FFD700;
-        }
-        .analytic-item strong {
-            color: #8B4513; 
-        }
+        /* --- Local Upload (Drag and Drop) --- */
+        .upload-container {
+            border: 2px dashed #FFD700;
+            background-color: #fff8e1;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            transition: background-color 0.3s, border-color 0.3s;
+            margin-top: 15px;
+        }
+        .upload-container.drag-over {
+            background-color: #FFF0B0;
+            border-color: #FFA500;
+        }
+        .upload-label {
+            background-color: #FFD700;
+            color: #333;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            display: inline-block;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .upload-label:hover {
+            background-color: #FFA500;
+        }
+        #file-input {
+            display: none; 
+        }
+        
+        /* --- File Analytics & Preview --- */
+        #file-analytics {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #FFD70020;
+            border-left: 5px solid #FFD700;
+            border-radius: 4px;
+            font-size: 0.95em;
+            color: #555;
+            text-align: left;
+        }
+        #file-analytics strong {
+            color: #333;
+        }
+        
+        /* STREAMING PROGRESS BAR STYLES */
+        .progress-bar-container {
+            width: 100%;
+            background-color: #eee;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+            display: none; /* Hidden by default */
+        }
+        .progress-bar {
+            height: 15px;
+            background-color: #FF9900; /* AWS Orange */
+            width: 0%;
+            text-align: center;
+            line-height: 15px;
+            color: white;
+            font-size: 10px;
+            transition: width 0.3s ease-out;
+        }
+        
+        #file-preview {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #FFD700;
+        }
+        .file-item {
+            background-color: #FFFACD;
+            border: 1px solid #FFD700;
+            border-radius: 15px; 
+            padding: 5px 10px;
+            font-size: 0.85em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
 
-        /* --- Generate Text --- */
-        #llm-output {
-            padding: 20px;
-            border: 1px solid #FFD700;
-            background-color: #fff8e1;
-        }
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 25px;
-            padding: 10px 0;
-            border-top: 1px solid #eee;
-        }
-        input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            height: 8px;
-            background: #FFD70050;
-            border-radius: 4px;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #FFA500;
-            cursor: pointer;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
-        #word-count-display {
-            min-width: 50px;
-            font-weight: bold;
-            color: #8B4513;
-        }
-        
-    </style>
+        /* --- Analytics/Matrix Output --- */
+        #matrix-output {
+            padding: 25px;
+            background-color: #FFFACD;
+            border-left: 5px solid #FFD700;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            min-height: 120px;
+        }
+        .analytic-item {
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px dotted #FFD700;
+        }
+        .analytic-item strong {
+            color: #8B4513; 
+        }
+
+        /* --- Generate Text --- */
+        #llm-output {
+            padding: 20px;
+            border: 1px solid #FFD700;
+            background-color: #fff8e1;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            padding: 10px 0;
+            border-top: 1px solid #eee;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #FFD70050;
+            border-radius: 4px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #FFA500;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        #word-count-display {
+            min-width: 50px;
+            font-weight: bold;
+            color: #8B4513;
+        }
+        
+    </style>
 </head>
 <body>
 <div class="container">
-    <h1><i class="fas fa-sitemap"></i> DIY LLM</h1>
-    <p>A sophisticated tool for training lightweight LLMs using local files, AWS S3, or public Kaggle datasets, and generating contextual text.</p>
+    <h1><i class="fas fa-sitemap"></i> DIY LLM</h1>
+    <p>A sophisticated tool for training lightweight LLMs using local files, AWS S3, or public Kaggle datasets, and generating contextual text.</p>
 
-    <section>
-        <h2>Data Ingestion</h2>
-        <div class="data-source-tabs">
-            
-            <div class="data-source-card">
-                <h3>Local Files</h3>
-                <i class="fas fa-upload"></i>
-                <p style="font-size: 0.9em; color: #666;">Drag, drop, or select multiple local files to upload.</p>
-                <label class="upload-label" for="file-input">Select Files</label>
-            </div>
-            
-            <div class="data-source-card" id="aws-card">
-                <h3>AWS S3 Storage</h3>
-                <i class="fab fa-aws" style="color: #FF9900;"></i>
-                <p style="font-size: 0.9em; color: #333; font-weight: bold;">Connect to an AWS S3 bucket to pull training data.</p>
-                <button onclick="connectAwsS3()">
-                    <i class="fas fa-link"></i> Connect AWS S3
-                </button>
-            </div>
-            
-            <div class="data-source-card">
-                <h3>Kaggle Dataset</h3>
-                <i class="fas fa-chart-bar"></i>
-                <p style="font-size: 0.9em; color: #666;">Pull data directly from a public Kaggle dataset.</p>
-                <button onclick="alert('Integration logic for Kaggle data pull goes here.')">
-                    <i class="fas fa-download"></i> Fetch from Kaggle
-                </button>
-            </div>
-        </div>
+    <section>
+        <h2>Data Ingestion</h2>
+        <div class="data-source-tabs">
+            
+            <div class="data-source-card">
+                <h3>Local Files</h3>
+                <i class="fas fa-upload"></i>
+                <p style="font-size: 0.9em; color: #666;">Drag, drop, or select multiple local files to upload.</p>
+                <label class="upload-label" for="file-input">Select Files</label>
+            </div>
+            
+            <div class="data-source-card" id="aws-card">
+                <h3>AWS S3 Storage</h3>
+                <i class="fab fa-aws" style="color: #FF9900;"></i>
+                <p style="font-size: 0.9em; color: #333; font-weight: bold;">Connect to an AWS S3 bucket to pull training data.</p>
+                <button onclick="connectAwsS3()">
+                    <i class="fas fa-link"></i> Connect AWS S3
+                </button>
+            </div>
+            
+            <div class="data-source-card">
+                <h3>Kaggle Dataset</h3>
+                <i class="fas fa-chart-bar"></i>
+                <p style="font-size: 0.9em; color: #666;">Pull data directly from a public Kaggle dataset.</p>
+                <button onclick="alert('Integration logic for Kaggle data pull goes here.')">
+                    <i class="fas fa-download"></i> Fetch from Kaggle
+                </button>
+            </div>
+        </div>
 
-        <div class="upload-container" id="drop-zone">
-             <i class="fas fa-file-upload" style="font-size: 1.5em; color: #FFD700; margin-bottom: 5px;"></i>
-             <p style="margin: 0; font-weight: bold;">Drop files here or check AWS/Kaggle options above.</p>
-             <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
-             <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
-             <div id="progress-container" class="progress-bar-container">
-                 <div id="progress-bar" class="progress-bar">0%</div>
-             </div>
-             <div id="file-preview"></div>
-        </div>
+        <div class="upload-container" id="drop-zone">
+             <i class="fas fa-file-upload" style="font-size: 1.5em; color: #FFD700; margin-bottom: 5px;"></i>
+             <p style="margin: 0; font-weight: bold;">Drop files here or check AWS/Kaggle options above.</p>
+             <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+             <div id="file-analytics">0 Files Uploaded (0.0 KB)</div>
+             <div id="progress-container" class="progress-bar-container">
+                 <div id="progress-bar" class="progress-bar">0%</div>
+             </div>
+             <div id="file-preview"></div>
+        </div>
 
-        <textarea id="text-input" placeholder="... or paste your text data directly here."></textarea>
-        <button onclick="buildMatrix()"><i class="fas fa-brain"></i> Build Matrix & Show Analytics</button>
-    </section>
+        <textarea id="text-input" placeholder="... or paste your text data directly here."></textarea>
+        <button onclick="buildMatrix()"><i class="fas fa-brain"></i> Build Matrix & Show Analytics</button>
+    </section>
 
-    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
+    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
 
-    <section>
-        <h2>Matrix Analytics</h2>
-        <div id="matrix-output">
-            <em>Analytics derived from the transition matrix will appear here after training.</em>
-        </div>
-    </section>
+    <section>
+        <h2>Matrix Analytics</h2>
+        <div id="matrix-output">
+            <em>Analytics derived from the transition matrix will appear here after training.</em>
+        </div>
+    </section>
 
-    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
+    <hr style="margin: 30px 0; border-top: 1px dashed #ccc;">
 
-    <section>
-        <h2>Generate Text</h2>
-        <div class="slider-container">
-            <label for="word-count"><i class="fas fa-sliders-h"></i> Output Word Count:</label>
-            <input type="range" id="word-count" min="100" max="1000" value="500">
-            <span id="word-count-display">500</span>
-        </div>
-        <button onclick="generateText()"><i class="fas fa-magic"></i> Generate Text Sequence</button>
-        <div id="llm-output">
-            <em>Generated text will appear here.</em>
-        </div>
-    </section>
+    <section>
+        <h2>Generate Text</h2>
+        <div class="slider-container">
+            <label for="word-count"><i class="fas fa-sliders-h"></i> Output Word Count:</label>
+            <input type="range" id="word-count" min="100" max="1000" value="500">
+            <span id="word-count-display">500</span>
+        </div>
+        <button onclick="generateText()"><i class="fas fa-magic"></i> Generate Text Sequence</button>
+        <div id="llm-output">
+            <em>Generated text will appear here.</em>
+        </div>
+    </section>
 </div>
 
 <script>
-    let transitionMatrix = {};
-    let startWord = '';
-    let allUploadedFiles = []; 
-    const LATENCY_THRESHOLD_BYTES = 2048000; 
+    let transitionMatrix = {};
+    let startWord = '';
+    let allUploadedFiles = []; 
+    const LATENCY_THRESHOLD_BYTES = 2048000; 
 
-    const slider = document.getElementById('word-count');
-    const display = document.getElementById('word-count-display');
-    slider.addEventListener('input', () => display.textContent = slider.value);
+    const slider = document.getElementById('word-count');
+    const display = document.getElementById('word-count-display');
+    slider.addEventListener('input', () => display.textContent = slider.value);
 
-    const fileInput = document.getElementById('file-input');
-    const filePreview = document.getElementById('file-preview');
-    const dropZone = document.getElementById('drop-zone');
-    const textArea = document.getElementById('text-input');
-    const fileAnalytics = document.getElementById('file-analytics');
-    const progressBarContainer = document.getElementById('progress-container');
-    const progressBar = document.getElementById('progress-bar');
+    const fileInput = document.getElementById('file-input');
+    const filePreview = document.getElementById('file-preview');
+    const dropZone = document.getElementById('drop-zone');
+    const textArea = document.getElementById('text-input');
+    const fileAnalytics = document.getElementById('file-analytics');
+    const progressBarContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
 
-    // --- AWS S3 Integration Logic (Streaming) ---
+    // --- AWS S3 Integration Logic (Streaming) ---
 
-    async function connectAwsS3() {
-        const s3Url = prompt(
-            "Enter the full **Pre-Signed S3 URL** or **Public URL** of the file (.txt, .csv, .md).\n\n" +
-            "NOTE: This GitHub Pages front-end cannot handle private AWS credentials. A server-side component is REQUIRED to generate a secure, temporary, pre-signed URL for a private S3 object."
-        );
+    async function connectAwsS3() {
+        const s3Url = prompt(
+            "Enter the full **Pre-Signed S3 URL** or **Public URL** of the file (.txt, .csv, .md).\n\n" +
+            "NOTE: This GitHub Pages front-end cannot handle private AWS credentials. A server-side component is REQUIRED to generate a secure, temporary, pre-signed URL for a private S3 object."
+        );
 
-        if (!s3Url) {
-            alert("AWS S3 connection cancelled.");
-            return;
-        }
+        if (!s3Url) {
+            alert("AWS S3 connection cancelled.");
+            return;
+        }
 
-        const isFileUrl = s3Url.toLowerCase().startsWith('http') && (s3Url.toLowerCase().endsWith('.txt') || s3Url.toLowerCase().endsWith('.csv') || s3Url.toLowerCase().endsWith('.md'));
+        const isFileUrl = s3Url.toLowerCase().startsWith('http') && (s3Url.toLowerCase().endsWith('.txt') || s3Url.toLowerCase().endsWith('.csv') || s3Url.toLowerCase().endsWith('.md'));
 
-        if (isFileUrl) {
-            await fetchDataFromCloud(s3Url);
-        } else {
-             alert(`Invalid URL format detected or connection aborted. Please enter a direct file URL.`);
-        }
-    }
+        if (isFileUrl) {
+            await fetchDataFromCloud(s3Url);
+        } else {
+             alert(`Invalid URL format detected or connection aborted. Please enter a direct file URL.`);
+        }
+    }
 
-    /**
-     * Fetches data from S3 using ReadableStream API for memory-efficient chunking.
-     * @param {string} url The pre-signed or public S3 URL of the file.
-     */
-    async function fetchDataFromCloud(url) {
-        let totalBytesStreamed = 0;
-        let objectContentLength = null;
-        let isFirstChunk = true;
-        const fileName = url.split('/').pop().split('?')[0] || 'aws_data.txt';
+    /**
+     * Fetches data from S3 using ReadableStream API for memory-efficient chunking.
+     * @param {string} url The pre-signed or public S3 URL of the file.
+     */
+    async function fetchDataFromCloud(url) {
+        let totalBytesStreamed = 0;
+        let objectContentLength = null;
+        let isFirstChunk = true;
+        const fileName = url.split('/').pop().split('?')[0] || 'aws_data.txt';
 
-        // 1. Setup UI for streaming
-        progressBarContainer.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressBar.textContent = '0%';
-        
-        fileAnalytics.innerHTML = `<strong>Streaming ${fileName}...</strong>`;
-
-
-        try {
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                // Check if Content-Length exists (needed for progress)
-                if (response.headers.has('Content-Length')) {
-                    objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
-                }
-
-                throw new Error(`HTTP Error ${response.status}. Pre-Signed URL may be expired, or there's a CORS issue.`);
-            }
-
-            // Get Content-Length for progress bar if available
-            if (response.headers.has('Content-Length')) {
-                objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            
-            // Start the streaming loop
-            while (true) {
-                const { done, value } = await reader.read();
-                
-                if (done) break;
-
-                // Decode chunk to text
-                const chunkText = decoder.decode(value, { stream: true });
-                
-                // Prepend a newline only once, after the first local file or paste content
-                if (isFirstChunk) {
-                    textArea.value = textArea.value.trim();
-                    if (textArea.value.length > 0) {
-                        textArea.value += '\n';
-                    }
-                    isFirstChunk = false;
-                }
-                
-                // Append the chunk text directly to the textarea (non-blocking)
-                textArea.value += chunkText;
-
-                // Update progress tracking
-                totalBytesStreamed += value.length;
-                
-                if (objectContentLength) {
-                    const percentage = Math.min(100, Math.round((totalBytesStreamed / objectContentLength) * 100));
-                    progressBar.style.width = `${percentage}%`;
-                    progressBar.textContent = `${percentage}%`;
-                } else {
-                    // Fallback progress display if Content-Length is missing (e.g. gzip)
-                    const streamedMB = (totalBytesStreamed / 1048576).toFixed(2);
-                    progressBar.textContent = `${streamedMB} MB streamed...`;
-                }
-            }
-            
-            // Add the final text from the TextDecoder buffer
-            textArea.value += decoder.decode();
-
-            // 2. Finalize UI and Tracking
-            progressBarContainer.style.display = 'none';
-
-            const mockFile = {
-                name: fileName,
-                size: totalBytesStreamed, // Use the actual streamed size
-                text: () => Promise.resolve(textArea.value.trim())
-            };
-            
-            allUploadedFiles.push(mockFile);
-            renderFilePreviews();
-            
-            alert(`✅ Streaming Complete! Successfully appended ${ (totalBytesStreamed / 1048576).toFixed(2) } MB from S3 file: ${fileName}.`);
-
-        } catch (error) {
-            // 3. Error Handling
-            progressBarContainer.style.display = 'none';
-            console.error("Cloud Streaming Error:", error);
-            alert(`❌ Error streaming cloud data: ${error.message}`);
-        }
-    }
+        // 1. Setup UI for streaming
+        progressBarContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        
+        fileAnalytics.innerHTML = `<strong>Streaming ${fileName}...</strong>`;
 
 
-    // --- Core File Handling with Latency Check (Preserved) ---
+        try {
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                // Check if Content-Length exists (needed for progress)
+                if (response.headers.has('Content-Length')) {
+                    objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
+                }
 
-    function updateFileAnalytics() {
-        const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
-        const sizeInKB = (totalSize / 1024).toFixed(1);
-        fileAnalytics.innerHTML = `<strong>${allUploadedFiles.length}</strong> Files Uploaded (${sizeInKB} KB)`;
-    }
+                throw new Error(`HTTP Error ${response.status}. Pre-Signed URL may be expired, or there's a CORS issue.`);
+            }
 
-    function renderFilePreviews() {
-        filePreview.innerHTML = '';
-        allUploadedFiles.forEach(file => {
-            const fileDiv = document.createElement('div');
-            fileDiv.classList.add('file-item');
-            // Show size in KB/MB appropriately
-            const sizeDisplay = file.size > 1048576 
-                                ? `${(file.size / 1048576).toFixed(2)} MB` 
-                                : `${(file.size / 1024).toFixed(1)} KB`;
-            fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${sizeDisplay})`;
-            filePreview.appendChild(fileDiv);
-        });
-        updateFileAnalytics();
-    }
+            // Get Content-Length for progress bar if available
+            if (response.headers.has('Content-Length')) {
+                objectContentLength = parseInt(response.headers.get('Content-Length'), 10);
+            }
 
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over'); 
-        e.dataTransfer.dropEffect = 'copy';
-    });
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('drag-over');
-    });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            // Start the streaming loop
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
 
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('drag-over');
-        handleFiles(e.dataTransfer.files);
-    });
+                // Decode chunk to text
+                const chunkText = decoder.decode(value, { stream: true });
+                
+                // Prepend a newline only once, after the first local file or paste content
+                if (isFirstChunk) {
+                    textArea.value = textArea.value.trim();
+                    if (textArea.value.length > 0) {
+                        textArea.value += '\n';
+                    }
+                    isFirstChunk = false;
+                }
+                
+                // Append the chunk text directly to the textarea (non-blocking)
+                textArea.value += chunkText;
 
-    fileInput.addEventListener('change', (e) => {
-        handleFiles(e.target.files);
-        fileInput.value = null; 
-    });
+                // Update progress tracking
+                totalBytesStreamed += value.length;
+                
+                if (objectContentLength) {
+                    const percentage = Math.min(100, Math.round((totalBytesStreamed / objectContentLength) * 100));
+                    progressBar.style.width = `${percentage}%`;
+                    progressBar.textContent = `${percentage}%`;
+                } else {
+                    // Fallback progress display if Content-Length is missing (e.g. gzip)
+                    const streamedMB = (totalBytesStreamed / 1048576).toFixed(2);
+                    progressBar.textContent = `${streamedMB} MB streamed...`;
+                }
+            }
+            
+            // Add the final text from the TextDecoder buffer
+            textArea.value += decoder.decode();
 
-    async function handleFiles(files) {
-        if (!files.length) return;
+            // 2. Finalize UI and Tracking
+            progressBarContainer.style.display = 'none';
 
-        let totalNewSize = 0;
-        let allText = '';
-        
-        for (const file of files) {
-            allUploadedFiles.push(file); 
-            totalNewSize += file.size;
-        }
+            const mockFile = {
+                name: fileName,
+                size: totalBytesStreamed, // Use the actual streamed size
+                text: () => Promise.resolve(textArea.value.trim())
+            };
+            
+            allUploadedFiles.push(mockFile);
+            renderFilePreviews();
+            
+            alert(`✅ Streaming Complete! Successfully appended ${ (totalBytesStreamed / 1048576).toFixed(2) } MB from S3 file: ${fileName}.`);
 
-        for (const file of files) { 
-             try {
-                const text = await file.text();
-                allText += '\n' + text;
-            } catch (e) {
-                console.error(`Error reading file ${file.name}:`, e);
-            }
-        }
-        
-        textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim();
-        renderFilePreviews();
+        } catch (error) {
+            // 3. Error Handling
+            progressBarContainer.style.display = 'none';
+            console.error("Cloud Streaming Error:", error);
+            alert(`❌ Error streaming cloud data: ${error.message}`);
+        }
+    }
 
 
-        // Latency Suggestion Logic 
-        if (totalNewSize > LATENCY_THRESHOLD_BYTES) {
-            const sizeInMB = (totalNewSize / 1048576).toFixed(2);
-            setTimeout(() => {
-                 alert(`⚠️ **High Latency Alert:** You uploaded ${sizeInMB} MB. Processing datasets this large in the browser can lead to significant lag or crashes. For better performance, consider using the **AWS S3 Storage** streaming option for large files.`);
-            }, 100);
-        }
-    }
+    // --- Core File Handling with Latency Check (Preserved) ---
 
-    // --- Markov Matrix Computation & Generate Text (Preserved) ---
+    function updateFileAnalytics() {
+        const totalSize = allUploadedFiles.reduce((sum, file) => sum + file.size, 0);
+        const sizeInKB = (totalSize / 1024).toFixed(1);
+        fileAnalytics.innerHTML = `<strong>${allUploadedFiles.length}</strong> Files Uploaded (${sizeInKB} KB)`;
+    }
 
-    function buildMatrix() {
-        // ... (Matrix building logic remains unchanged)
-        const text = textArea.value.toLowerCase();
-        if (!text.trim()) {
-            alert('Please provide some text or upload files.');
-            return;
-        }
+    function renderFilePreviews() {
+        filePreview.innerHTML = '';
+        allUploadedFiles.forEach(file => {
+            const fileDiv = document.createElement('div');
+            fileDiv.classList.add('file-item');
+            // Show size in KB/MB appropriately
+            const sizeDisplay = file.size > 1048576 
+                                ? `${(file.size / 1048576).toFixed(2)} MB` 
+                                : `${(file.size / 1024).toFixed(1)} KB`;
+            fileDiv.innerHTML = `<i class="far fa-file"></i> <strong>${file.name}</strong> (${sizeDisplay})`;
+            filePreview.appendChild(fileDiv);
+        });
+        updateFileAnalytics();
+    }
 
-        const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
-        transitionMatrix = {};
-        let wordFrequencies = {};
-        let totalTransitions = 0;
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over'); 
+        e.dataTransfer.dropEffect = 'copy';
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
 
-        for (let i = 0; i < words.length; i++) {
-            const current = words[i];
-            const next = words[i + 1];
-            wordFrequencies[current] = (wordFrequencies[current] || 0) + 1;
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        handleFiles(e.dataTransfer.files);
+    });
 
-            if (next) {
-                if (!transitionMatrix[current]) transitionMatrix[current] = {};
-                transitionMatrix[current][next] = (transitionMatrix[current][next] || 0) + 1;
-                totalTransitions++;
-            }
-        }
+    fileInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        fileInput.value = null; 
+    });
 
-        const uniqueWords = Object.keys(wordFrequencies).length;
-        const totalWords = words.length;
-        let maxFreq = 0;
-        startWord = '';
-        
-        for (const word in wordFrequencies) {
-            if (wordFrequencies[word] > maxFreq) {
-                maxFreq = wordFrequencies[word];
-                startWord = word;
-            }
-        }
+    async function handleFiles(files) {
+        if (!files.length) return;
 
-        let maxOutgoing = 0;
-        let mostVariableWord = 'N/A';
-        for (const current in transitionMatrix) {
-            const numNextWords = Object.keys(transitionMatrix[current]).length;
-            if (numNextWords > maxOutgoing) {
-                maxOutgoing = numNextWords;
-                mostVariableWord = current;
-            }
-        }
+        let totalNewSize = 0;
+        let allText = '';
+        
+        for (const file of files) {
+            allUploadedFiles.push(file); 
+            totalNewSize += file.size;
+        }
 
-        document.getElementById('matrix-output').innerHTML = `
-            <h3><i class="fas fa-chart-line"></i> Dataset & Matrix Summary</h3>
-            <div class="analytic-item"><strong>Total Words:</strong> ${totalWords.toLocaleString()}</div>
-            <div class="analytic-item"><strong>Unique Vocabulary Size:</strong> ${uniqueWords.toLocaleString()}</div>
-            <div class="analytic-item"><strong>Total Transitions Mapped:</strong> ${totalTransitions.toLocaleString()}</div>
-            <div class="analytic-item"><strong>Most Frequent Starting Word:</strong> <strong>${startWord || 'N/A'}</strong> (Occurs ${maxFreq.toLocaleString()} times)</div>
-            <div class="analytic-item"><strong>Most Variable Word (Highest Out-Degree):</strong> <strong>${mostVariableWord}</strong> (Leads to ${maxOutgoing} different words)</div>
-            <div class="analytic-item"><strong>Average Next-Word Options:</strong> ${(totalTransitions / uniqueWords).toFixed(2)}</div>
-            <div style="margin-top: 15px; font-size: 0.9em; color: #888;">
-                <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here.)</em></p>
-            </div>
-        `;
-    }
+        for (const file of files) { 
+             try {
+                const text = await file.text();
+                allText += '\n' + text;
+            } catch (e) {
+                console.error(`Error reading file ${file.name}:`, e);
+            }
+        }
+        
+        textArea.value = (textArea.value.trim() + '\n' + allText.trim()).trim();
+        renderFilePreviews();
 
-    function generateText() {
-        // ... (Text generation logic remains unchanged)
-        if (!startWord || Object.keys(transitionMatrix).length === 0) {
-            document.getElementById('llm-output').textContent = 'Build the matrix first!';
-            return;
-        }
 
-        const maxWords = parseInt(slider.value);
-        let currentWord = startWord;
-        let generated = [currentWord];
+        // Latency Suggestion Logic 
+        if (totalNewSize > LATENCY_THRESHOLD_BYTES) {
+            const sizeInMB = (totalNewSize / 1048576).toFixed(2);
+            setTimeout(() => {
+                 alert(`⚠️ **High Latency Alert:** You uploaded ${sizeInMB} MB. Processing datasets this large in the browser can lead to significant lag or crashes. For better performance, consider using the **AWS S3 Storage** streaming option for large files.`);
+            }, 100);
+        }
+    }
 
-        for (let i = 1; i < maxWords; i++) {
-            const nextWords = transitionMatrix[currentWord];
-            if (!nextWords) break;
+    // --- Markov Matrix Computation & Generate Text (Preserved) ---
 
-            const candidates = [];
-            for (const w in nextWords) {
-                for (let k = 0; k < nextWords[w]; k++) candidates.push(w);
-            }
+    function buildMatrix() {
+        // ... (Matrix building logic remains unchanged)
+        const text = textArea.value.toLowerCase();
+        if (!text.trim()) {
+            alert('Please provide some text or upload files.');
+            return;
+        }
 
-            const nextWord = candidates[Math.floor(Math.random() * candidates.length)];
-            if (!nextWord) break;
-            generated.push(nextWord);
-            currentWord = nextWord;
-        }
+        const words = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').split(/\s+/).filter(w => w.length > 0);
+        transitionMatrix = {};
+        let wordFrequencies = {};
+        let totalTransitions = 0;
 
-        let output = generated.join(' ');
-        output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
-        document.getElementById('llm-output').textContent = output;
-    }
+        for (let i = 0; i < words.length; i++) {
+            const current = words[i];
+            const next = words[i + 1];
+            wordFrequencies[current] = (wordFrequencies[current] || 0) + 1;
 
-    // Initialize analytics on load
-    updateFileAnalytics();
+            if (next) {
+                if (!transitionMatrix[current]) transitionMatrix[current] = {};
+                transitionMatrix[current][next] = (transitionMatrix[current][next] || 0) + 1;
+                totalTransitions++;
+            }
+        }
+
+        const uniqueWords = Object.keys(wordFrequencies).length;
+        const totalWords = words.length;
+        let maxFreq = 0;
+        startWord = '';
+        
+        for (const word in wordFrequencies) {
+            if (wordFrequencies[word] > maxFreq) {
+                maxFreq = wordFrequencies[word];
+                startWord = word;
+            }
+        }
+
+        let maxOutgoing = 0;
+        let mostVariableWord = 'N/A';
+        for (const current in transitionMatrix) {
+            const numNextWords = Object.keys(transitionMatrix[current]).length;
+            if (numNextWords > maxOutgoing) {
+                maxOutgoing = numNextWords;
+                mostVariableWord = current;
+            }
+        }
+
+        document.getElementById('matrix-output').innerHTML = `
+            <h3><i class="fas fa-chart-line"></i> Dataset & Matrix Summary</h3>
+            <div class="analytic-item"><strong>Total Words:</strong> ${totalWords.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Unique Vocabulary Size:</strong> ${uniqueWords.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Total Transitions Mapped:</strong> ${totalTransitions.toLocaleString()}</div>
+            <div class="analytic-item"><strong>Most Frequent Starting Word:</strong> <strong>${startWord || 'N/A'}</strong> (Occurs ${maxFreq.toLocaleString()} times)</div>
+            <div class="analytic-item"><strong>Most Variable Word (Highest Out-Degree):</strong> <strong>${mostVariableWord}</strong> (Leads to ${maxOutgoing} different words)</div>
+            <div class="analytic-item"><strong>Average Next-Word Options:</strong> ${(totalTransitions / uniqueWords).toFixed(2)}</div>
+            <div style="margin-top: 15px; font-size: 0.9em; color: #888;">
+                <p><em>(Note: In a full implementation, charts showing word frequency distribution or top 10 transitions would be displayed here.)</em></p>
+            </div>
+        `;
+    }
+
+    function generateText() {
+        // ... (Text generation logic remains unchanged)
+        if (!startWord || Object.keys(transitionMatrix).length === 0) {
+            document.getElementById('llm-output').textContent = 'Build the matrix first!';
+            return;
+        }
+
+        const maxWords = parseInt(slider.value);
+        let currentWord = startWord;
+        let generated = [currentWord];
+
+        for (let i = 1; i < maxWords; i++) {
+            const nextWords = transitionMatrix[currentWord];
+            if (!nextWords) break;
+
+            const candidates = [];
+            for (const w in nextWords) {
+                for (let k = 0; k < nextWords[w]; k++) candidates.push(w);
+            }
+
+            const nextWord = candidates[Math.floor(Math.random() * candidates.length)];
+            if (!nextWord) break;
+            generated.push(nextWord);
+            currentWord = nextWord;
+        }
+
+        let output = generated.join(' ');
+        output = output.charAt(0).toUpperCase() + output.slice(1) + '.';
+        document.getElementById('llm-output').textContent = output;
+    }
+
+    // Initialize analytics on load
+    updateFileAnalytics();
 </script>
 </body>
 </html>
