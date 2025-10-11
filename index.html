@@ -268,6 +268,14 @@
                     </button>
                 </div>
                 <div class="data-source-card">
+                    <h3>Sample Dataset</h3>
+                    <i class="fas fa-book" style="color: #9334E9; font-size: 2.5em; margin-bottom: 16px;"></i>
+                    <p style="font-size: 0.9em;">Load a sample text corpus for quick testing.</p>
+                    <button onclick="loadSampleData()" style="background-color: #9334E9;">
+                        <i class="fas fa-file-alt"></i> Load Sample Text
+                    </button>
+                </div>
+                <div class="data-source-card">
                     <h3>Kaggle Dataset</h3>
                     <i class="fas fa-cloud-download-alt" style="color: var(--google-green); font-size: 2.5em; margin-bottom: 16px;"></i>
                     <p style="font-size: 0.9em;">Pull data directly from a public Kaggle dataset via API.</p>
@@ -328,27 +336,27 @@
             <div id="model-controls-panel">
                 <div class="control-group">
                     <label for="max-tokens-input">Max Tokens (Inference)</label>
-                    <input type="number" id="max-tokens-input" value="500" min="10">
+                    <input type="number" id="max-tokens-input" value="50" min="10">
                 </div>
                 <div class="control-group">
                     <label for="temperature-input">Temperature (Sampling)</label>
-                    <input type="number" id="temperature-input" value="0.8" step="0.1" min="0.1" max="2.0">
+                    <input type="number" id="temperature-input" value="0.7" step="0.1" min="0.1" max="2.0">
                 </div>
                 <div class="control-group">
                     <label for="embedding-size-input">Embedding Dim (d_model)</label>
-                    <input type="number" id="embedding-size-input" value="64" min="16">
+                    <input type="number" id="embedding-size-input" value="128" min="16">
                 </div>
                 <div class="control-group">
                     <label for="epochs-input">Epochs (Training)</label>
-                    <input type="number" id="epochs-input" value="10" min="1">
+                    <input type="number" id="epochs-input" value="20" min="1">
                 </div>
                 <div class="control-group">
                     <label for="batch-size-input">Batch Size (Training)</label>
-                    <input type="number" id="batch-size-input" value="32" min="1">
+                    <input type="number" id="batch-size-input" value="16" min="1">
                 </div>
                 <div class="control-group">
                     <label for="learning-rate-input">Learning Rate</label>
-                    <input type="number" id="learning-rate-input" value="0.001" step="0.0001" min="0.0001">
+                    <input type="number" id="learning-rate-input" value="0.0005" step="0.0001" min="0.0001">
                 </div>
             </div>
             
@@ -423,15 +431,15 @@
     // Configuration
     const CONFIG = {
         modelMode: 'MARKOV',
-        maxTokens: 500,
-        temperature: 0.8,
-        embeddingDim: 64,
+        maxTokens: 50, // Reduced for better output
+        temperature: 0.7, // Lower temperature for more focused generation
+        embeddingDim: 128, // Increased for better representation
         numHeads: 4,
-        ffnDim: 128,
+        ffnDim: 256, // Increased FFN dimension
         train: {
-            epochs: 10,
-            batchSize: 32,
-            learningRate: 0.001
+            epochs: 20, // More epochs for better learning
+            batchSize: 16, // Smaller batch for better gradients
+            learningRate: 0.0005 // Lower learning rate for stability
         }
     };
     
@@ -996,6 +1004,44 @@
         document.getElementById('progress-container').style.display = 'none';
     }
     
+    // Sample Data Loader
+    function loadSampleData() {
+        const sampleText = `
+Machine learning is a subset of artificial intelligence that enables computers to learn from data without being explicitly programmed. 
+Through algorithms and statistical models, machine learning systems can identify patterns and make decisions with minimal human intervention.
+
+The field of machine learning has revolutionized many industries. In healthcare, machine learning algorithms can predict patient outcomes 
+and assist in diagnosis. In finance, they detect fraudulent transactions and optimize trading strategies. Self-driving cars use machine 
+learning to navigate roads and avoid obstacles.
+
+There are three main types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. Supervised learning 
+uses labeled data to train models. The algorithm learns from examples where the correct answer is known. Unsupervised learning finds hidden 
+patterns in data without labels. Reinforcement learning trains agents to make sequences of decisions by rewarding desired behaviors.
+
+Deep learning is a powerful subset of machine learning based on artificial neural networks. These networks contain multiple layers that 
+process information hierarchically. Each layer extracts increasingly complex features from the input data. Deep learning has achieved 
+remarkable success in image recognition, natural language processing, and game playing.
+
+Natural language processing allows computers to understand and generate human language. Modern language models can write essays, answer 
+questions, and even engage in conversations. These models are trained on vast amounts of text data from books, websites, and other sources.
+
+The future of machine learning looks promising. Researchers are working on making algorithms more efficient, interpretable, and fair. 
+As computing power increases and data becomes more abundant, machine learning will continue to transform how we live and work.
+
+Artificial intelligence and machine learning are not without challenges. Concerns about bias in algorithms, privacy of training data, 
+and the environmental impact of large models are important considerations. Responsible development of these technologies requires careful 
+attention to ethics and societal impact.
+
+Education in machine learning is becoming increasingly accessible. Online courses, tutorials, and open-source libraries make it easier 
+for people to learn and experiment with these powerful tools. The democratization of machine learning knowledge is accelerating innovation 
+across all fields.
+        `;
+        
+        document.getElementById('text-input').value = sampleText.trim();
+        dataHandler.corpusText = sampleText.trim();
+        showAlert('Sample text loaded! This is a small corpus about machine learning. Click "Tokenize & Preprocess" to continue.', 'Sample Data Loaded');
+    }
+    
     // Markov Chain
     class MarkovChain {
         constructor(tokenizer, dataHandler) {
@@ -1059,20 +1105,37 @@
 
             console.log(`Building model with vocab_size=${vocabSize}, d_model=${d_model}, seq_len=${seqLen}`);
 
+            // Improved model architecture with flattening for better sequence processing
             this.model = tf.sequential({
                 layers: [
+                    // Flatten the one-hot encoded input
+                    tf.layers.flatten({ 
+                        inputShape: [seqLen, vocabSize],
+                        name: 'flatten_input'
+                    }),
+                    // First dense layer (embedding-like)
                     tf.layers.dense({ 
-                        units: d_model, 
-                        inputShape: [seqLen, vocabSize], 
+                        units: d_model * 2, 
                         activation: 'relu',
+                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
                         name: 'embedding_dense'
                     }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    // Second dense layer (attention-like)
                     tf.layers.dense({ 
                         units: ffnDim, 
                         activation: 'relu',
+                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
                         name: 'attention_ffn'
                     }),
-                    tf.layers.dropout({ rate: 0.1 }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    // Third hidden layer
+                    tf.layers.dense({ 
+                        units: d_model, 
+                        activation: 'relu',
+                        name: 'hidden_layer'
+                    }),
+                    // Output layer
                     tf.layers.dense({ 
                         units: vocabSize, 
                         activation: 'softmax',
@@ -1095,7 +1158,9 @@
                 • Embedding Dim: ${d_model}<br>
                 • Sequence Length: ${seqLen}<br>
                 • FFN Dim: ${ffnDim}<br>
-                • Learning Rate: ${CONFIG.train.learningRate}
+                • Hidden Layers: 4<br>
+                • Learning Rate: ${CONFIG.train.learningRate}<br>
+                • Regularization: L2 (0.01)
             `, 'Model Ready');
         }
 
@@ -1213,8 +1278,10 @@
             }
             
             let currentIDs = outputIDs.slice(-SEQUENCE_LENGTH);
+            let generatedCount = 0;
+            const maxGenerations = Math.min(CONFIG.maxTokens, 100); // Limit output
 
-            for (let i = 0; i < CONFIG.maxTokens; i++) {
+            for (let i = 0; i < maxGenerations; i++) {
                 if (currentIDs.length < SEQUENCE_LENGTH) {
                     currentIDs = Array(SEQUENCE_LENGTH - currentIDs.length).fill(UNK_TOKEN_ID).concat(currentIDs);
                 }
@@ -1230,12 +1297,18 @@
 
                 const nextId = this.sampleWithTemperature(Array.from(logits), CONFIG.temperature);
                 
-                if (nextId === UNK_TOKEN_ID || nextId === 0) break;
+                // Stop if we get UNK or PAD
+                if (nextId === UNK_TOKEN_ID || nextId === 0) {
+                    console.log('Stopping generation: UNK/PAD token sampled');
+                    break;
+                }
 
                 outputIDs.push(nextId);
                 currentIDs.push(nextId);
+                generatedCount++;
                 
-                if (outputIDs.length >= prompt.split(/\s+/).length + CONFIG.maxTokens) break;
+                // Stop after generating enough new tokens
+                if (generatedCount >= 50) break;
                 
                 if (i % 10 === 0) await tf.nextFrame();
             }
@@ -1253,25 +1326,35 @@
             const size = probabilities.length;
             
             let sum = probabilities.reduce((a, b) => a + b, 0);
-            if (sum === 0) return UNK_TOKEN_ID;
+            if (sum === 0) return 1; // Return first real token instead of UNK
             
             let scaledProbs = probabilities.map(p => p / sum);
             
+            // Apply temperature scaling
             if (temperature !== 1.0) {
-                 scaledProbs = scaledProbs.map(p => Math.pow(p + 1e-10, 1 / temperature));
+                 scaledProbs = scaledProbs.map(p => Math.pow(Math.max(p, 1e-10), 1 / temperature));
                  const scaledSum = scaledProbs.reduce((a, b) => a + b, 0);
                  scaledProbs = scaledProbs.map(p => p / scaledSum);
             }
             
+            // Reduce probability of UNK token (index 0) to avoid generating it
+            scaledProbs[0] = scaledProbs[0] * 0.01;
+            
+            // Renormalize after reducing UNK probability
+            const newSum = scaledProbs.reduce((a, b) => a + b, 0);
+            scaledProbs = scaledProbs.map(p => p / newSum);
+            
+            // Categorical sampling
             let r = Math.random();
             let accumulator = 0;
             for (let i = 0; i < size; i++) {
                  accumulator += scaledProbs[i];
-                 if (r < accumulator) {
+                 if (r < accumulator && i !== 0) { // Skip UNK token
                      return i;
                  }
             }
-            return size - 1;
+            // Fallback: return a random non-UNK token
+            return Math.floor(Math.random() * (size - 1)) + 1;
         }
 
         async saveModel() {
