@@ -1,312 +1,323 @@
-// training-worker.js
-// Runs in a background thread for non-blocking UI training with IndexedDB persistence
-// ====
+/* training-worker.js
+Dedicated Web Worker:
+- Accepts commands: start-new, resume, pause, save-now
+- Runs a CPU-bound training loop (toy model) but structured to be replaceable with real training
+- Periodically (every 5s) posts progress messages
+- Checkpoints state to IndexedDB transactionally; handles QuotaExceededError and posts checkpoint-error
+- Checkpoint structure: { taskId, timestamp, stepNumber, taskConfig, modelWeights: Blob }
+*/
 
-importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
+const DB_NAME = 'llm_worker_checkpoints_v1';
+const STORE_NAME = 'checkpoints';
 
-// ====================================================================
-// CONFIG and State
-// ====================================================================
-
-const CONFIG = {
-    // These should be kept in sync with the main thread's CONFIG
-    SEQUENCE_LENGTH: 10,
-    UNK_TOKEN_ID: 0,
-    MAX_CHECKPOINT_SIZE_MB: 50,
-    DB_NAME: 'LLMTrainingDB',
-    STORE_NAME: 'Checkpoints',
-    // training config will be passed on START
+// Worker state
+let state = {
+  running: false,
+  paused: false,
+  taskId: null,
+  stepNumber: 0,
+  targetEpochs: 50,
+  saveInterval: 300000, // default 5m
+  lastSaveTs: 0,
+  msPerStep: 50, // simulated work duration per step
+  modelWeights: null // Float32Array
 };
 
-let workerModel = null;
-let isTraining = false;
-let taskId = 'training-task'; 
+let periodicProgressTimer = null;
+let checkpointTimer = null;
+let lastProgressPost = 0;
 
-// ====================================================================
-// IndexedDB Persistence Functions (Section 1.2 & 3.3)
-// ====================================================================
-
-function openDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(CONFIG.DB_NAME, 1);
-        
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            // Create the object store with 'taskId' as the key
-            if (!db.objectStoreNames.contains(CONFIG.STORE_NAME)) {
-                 db.createObjectStore(CONFIG.STORE_NAME, { keyPath: 'taskId' });
-            }
-        };
-
-        request.onsuccess = (event) => resolve(event.target.result);
-        request.onerror = (event) => reject(event.target.error);
-    });
+// utility: post message safely
+function send(msg){
+  postMessage(msg);
 }
 
-// Checkpointing Responsibility: Web Worker writes directly to IndexedDB
-async function saveCheckpoint(taskId, epoch, loss, weightsBuffer) {
-    if (weightsBuffer.byteLength > CONFIG.MAX_CHECKPOINT_SIZE_MB * 1024 * 1024) {
-        throw new Error(`Checkpoint size exceeds limit of ${CONFIG.MAX_CHECKPOINT_SIZE_MB} MB.`);
-    }
-
-    const db = await openDB();
-    // Use an explicit transaction
-    const transaction = db.transaction([CONFIG.STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(CONFIG.STORE_NAME);
-
-    const checkpoint = {
-        taskId: taskId,
-        timestamp: Date.now(),
-        stepNumber: epoch, // The precise iteration/epoch/step to resume from.
-        currentLoss: loss,
-        modelWeights: new Blob([weightsBuffer]) // Store weights as a Blob
+// IndexedDB helpers (worker context supports indexedDB)
+function openDb(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)){
+        db.createObjectStore(STORE_NAME, {keyPath: 'taskId'});
+      }
     };
-    
-    // Handle Quota Error (Section 3.3)
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IDB open failed'));
+  });
+}
+
+async function saveCheckpointTransactional(){
+  // Serialize modelWeights to Blob (ArrayBuffer)
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+
+    const modelArray = state.modelWeights || new Float32Array([Math.random()]); // Fallback
+    const ab = modelArray.buffer ? modelArray.buffer : (new Float32Array(modelArray)).buffer;
+    const blob = new Blob([ab], {type:'application/octet-stream'});
+
+    const record = {
+      taskId: state.taskId || ('task-'+Date.now()),
+      timestamp: Date.now(),
+      stepNumber: state.stepNumber,
+      taskConfig: { targetEpochs: state.targetEpochs, msPerStep: state.msPerStep },
+      modelWeights: blob
+    };
+
+    return new Promise((resolve, reject) => {
+      const req = store.put(record);
+      req.onsuccess = () => {
+        resolve(record);
+      };
+      req.onerror = (e) => {
+        reject(req.error || new Error('IDB put failed'));
+      };
+      // safeguard: abort on tx error
+      tx.onabort = () => reject(new Error('IDB transaction aborted'));
+    });
+  } catch(err){
+    throw err;
+  }
+}
+
+async function loadLatestCheckpoint(taskId){
+  // Load specified taskId or newest
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    if (taskId){
+      const r = store.get(taskId);
+      r.onsuccess = ()=> resolve(r.result || null);
+      r.onerror = ()=> reject(r.error);
+    } else {
+      const cursor = store.openCursor();
+      let best = null;
+      cursor.onsuccess = (e)=>{
+        const c = e.target.result;
+        if (!c) { resolve(best); return; }
+        const rec = c.value;
+        if (!best || (rec.timestamp || 0) > (best.timestamp || 0)) best = rec;
+        c.continue();
+      };
+      cursor.onerror = ()=>reject(cursor.error);
+    }
+  });
+}
+
+function setModelRandom(size=256){
+  // small model: Float32Array
+  state.modelWeights = new Float32Array(size);
+  for (let i=0;i<size;i++) state.modelWeights[i] = (Math.random()-0.5)*0.1;
+}
+
+// Simulated training step (CPU-bound but small)
+function trainingStep(){
+  // simple gradient-like update of the Float32Array weights
+  const w = state.modelWeights;
+  let loss = 0;
+  for (let i=0;i<w.length;i++){
+    // pretend gradient is sign of weight + small noise
+    const grad = Math.tanh(w[i]) * 0.01 + (Math.random()-0.5)*0.001;
+    w[i] -= grad * 0.5; // step
+    loss += Math.abs(w[i]);
+  }
+  // return pseudo loss
+  return loss / w.length;
+}
+
+async function runLoop(){
+  state.running = true;
+  state.paused = false;
+  send({type:'log', text:'Training loop started.'});
+  // start periodic progress (every 5s)
+  lastProgressPost = Date.now();
+  if (periodicProgressTimer) clearInterval(periodicProgressTimer);
+  periodicProgressTimer = setInterval(()=>{
+    postProgress();
+  }, 5000);
+
+  // checkpoint timer (in-case saveInterval is not tied to iterations)
+  if (checkpointTimer) clearInterval(checkpointTimer);
+  checkpointTimer = setInterval(()=>{
     try {
-        await new Promise((resolve, reject) => {
-            const request = store.put(checkpoint);
-            request.onsuccess = () => resolve();
-            request.onerror = (e) => {
-                if (e.target.error.name === 'QuotaExceededError') {
-                     reject(e.target.error); 
-                } else {
-                    reject(e.target.error);
-                }
-            };
-        });
-    } catch (e) {
-        if (e.name === 'QuotaExceededError') {
-             isTraining = false;
-             postMessage({ command: 'QUOTA_ERROR' });
-             throw e; // Stop execution
-        }
-        throw e;
+      checkpointNow().catch(e=>{
+        // post error; main will handle QuotaExceededError case
+        send({type:'checkpoint-error', error:serializeError(e)});
+      });
+    } catch(e){
+      send({type:'checkpoint-error', error:serializeError(e)});
     }
+  }, Math.max(1000, state.saveInterval || 300000));
+
+  // Main training loop
+  while(state.running){
+    if (state.paused){
+      await sleep(200);
+      continue;
+    }
+    // perform one "step" (simulated workload)
+    const start = performance.now();
+    const loss = trainingStep();
+    const end = performance.now();
+    state.stepNumber += 1;
+
+    // occasionally send progress if >5s passed
+    if (Date.now() - lastProgressPost >= 5000){
+      postProgress(loss);
+      lastProgressPost = Date.now();
+    }
+
+    // checkpointing by step-count threshold (e.g., every 100 steps)
+    if (state.stepNumber % 100 === 0){
+      try {
+        const meta = await checkpointNow();
+        send({type:'checkpoint-saved', meta});
+      } catch(err){
+        // handle quota exceeded specially:
+        send({type:'checkpoint-error', error:serializeError(err)});
+        if (err && err.name === 'QuotaExceededError'){
+          // Pause worker and let main thread propose download
+          state.paused = true;
+          send({type:'log', text:'Paused due to QuotaExceededError.'});
+        }
+      }
+    }
+
+    // finish condition
+    if (state.stepNumber >= state.targetEpochs){
+      send({type:'log', text:'Target epochs reached. Training complete.'});
+      postProgress();
+      await checkpointNow().catch(e=>send({type:'checkpoint-error', error:serializeError(e)}));
+      state.running = false;
+      break;
+    }
+
+    // throttle to simulate real CPU time (msPerStep)
+    const elapsed = (end - start);
+    const toWait = Math.max(0, state.msPerStep - elapsed);
+    if (toWait > 0) await sleep(toWait);
+  }
+
+  // cleanup timers
+  if (periodicProgressTimer) { clearInterval(periodicProgressTimer); periodicProgressTimer=null; }
+  if (checkpointTimer) { clearInterval(checkpointTimer); checkpointTimer=null; }
+
+  send({type:'log', text:'Training loop exited.'});
 }
 
-async function getLatestCheckpoint(taskId) {
-    const db = await openDB();
-    const transaction = db.transaction([CONFIG.STORE_NAME], 'readonly');
-    const store = transaction.objectStore(CONFIG.STORE_NAME);
+function postProgress(loss){
+  const pct = Math.min(100, Math.round((state.stepNumber / (state.targetEpochs || 1)) * 100));
+  send({
+    type:'progress',
+    percentage: pct,
+    stepNumber: state.stepNumber,
+    epochs: state.targetEpochs,
+    status: state.paused ? 'paused' : (state.running ? 'running' : 'idle'),
+    loss: loss || null
+  });
+}
 
-    return new Promise((resolve) => {
-        const request = store.get(taskId);
-        request.onsuccess = (event) => {
-            const checkpoint = event.target.result;
-            if (checkpoint && checkpoint.modelWeights instanceof Blob) {
-                // Convert Blob back to ArrayBuffer
-                const reader = new FileReader();
-                reader.onload = () => {
-                     checkpoint.modelWeights = reader.result;
-                     resolve(checkpoint);
-                };
-                reader.readAsArrayBuffer(checkpoint.modelWeights);
-            } else {
-                 resolve(checkpoint);
+async function checkpointNow(){
+  // Save to IDB
+  try {
+    const meta = await saveCheckpointTransactional();
+    state.lastSaveTs = Date.now();
+    return meta;
+  } catch(err){
+    // If QuotaExceededError bubble up error object with name property
+    throw err;
+  }
+}
+
+// helper
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+function serializeError(e){
+  if (!e) return null;
+  return {name:e.name, message:e.message, stack: e.stack};
+}
+
+// message handler
+onmessage = async (ev) => {
+  const msg = ev.data;
+  if (!msg || !msg.type) return;
+  try {
+    switch(msg.type){
+      case 'start-new':
+        {
+          const p = msg.payload || {};
+          state.taskId = p.taskId || ('task-'+Date.now());
+          const cfg = p.config || {};
+          state.targetEpochs = Number(cfg.epochs) || 50;
+          state.saveInterval = Number(cfg.saveInterval) || state.saveInterval;
+          state.stepNumber = 0;
+          setModelRandom(1024); // smallish model by default
+          send({type:'log', text:'Starting new training task ' + state.taskId});
+          postMessage({type:'ready'});
+          // start loop
+          runLoop().catch(e=>send({type:'log', text:'RunLoop failed: '+ (e.message||e)}));
+        }
+        break;
+      case 'resume':
+        {
+          const taskId = msg.payload && msg.payload.taskId;
+          // attempt to load checkpoint
+          try {
+            const rec = await loadLatestCheckpoint(taskId || null);
+            if (!rec) {
+              send({type:'log', text:'No checkpoint found to resume.'});
+              // optionally start new idle state
+              break;
             }
-        };
-        request.onerror = () => resolve(null);
-    });
-}
-
-async function deleteCheckpoint(taskId) {
-    const db = await openDB();
-    const transaction = db.transaction([CONFIG.STORE_NAME], 'readwrite');
-    const store = transaction.objectStore(CONFIG.STORE_NAME);
-    await new Promise(resolve => {
-        const request = store.delete(taskId);
-        request.onsuccess = resolve;
-        request.onerror = resolve;
-    });
-}
-
-
-// ====================================================================
-// Transformer Model Definition
-// ====================================================================
-
-function createModel(config) {
-    const { vocabSize, sequenceLength, embeddingDim, ffnDim, numHeads, learningRate } = config;
-    
-    // 1. Input Layer
-    const input = tf.input({ shape: [sequenceLength], dtype: 'int32' });
-    
-    // 2. Embedding Layer
-    let embedding = tf.layers.embedding({
-        inputDim: vocabSize,
-        outputDim: embeddingDim,
-        inputLength: sequenceLength
-    }).apply(input);
-
-    // 3. Simplified Transformer Block (Self-Attention)
-    const attentionOutput = tf.layers.multiHeadAttention({
-        numHeads: numHeads,
-        keyDim: embeddingDim / numHeads 
-    }).apply([embedding, embedding, embedding]); 
-
-    // Residual Connection and Layer Normalization
-    let norm1 = tf.layers.layerNormalization({ epsilon: 1e-6 }).apply(tf.add(embedding, attentionOutput));
-    
-    // Feed Forward Network
-    const ffn = tf.layers.timeDistributed({
-        layer: tf.layers.dense({ units: ffnDim, activation: 'relu' })
-    }).apply(norm1);
-    
-    const ffnOutput = tf.layers.timeDistributed({
-        layer: tf.layers.dense({ units: embeddingDim })
-    }).apply(ffn);
-    
-    let norm2 = tf.layers.layerNormalization({ epsilon: 1e-6 }).apply(tf.add(norm1, ffnOutput));
-
-    // 4. Output Layer: Use the last token's representation for next word prediction (typical LLM approach)
-    const finalVector = tf.layers.flatten({}).apply(norm2);
-
-    // Final Dense layer to map to vocabulary size (logits)
-    const output = tf.layers.dense({ 
-        units: vocabSize,
-        activation: 'softmax' 
-    }).apply(finalVector);
-    
-    const model = tf.model({ inputs: input, outputs: output });
-
-    model.compile({
-        optimizer: tf.train.adam(learningRate),
-        loss: 'sparseCategoricalCrossentropy',
-        metrics: ['accuracy']
-    });
-    
-    return model;
-}
-
-// ====================================================================
-// Training Function (Section 3.2)
-// ====================================================================
-
-async function trainWorkerModel(data) {
-    const config = data.config;
-    taskId = config.taskId; // Update global taskId
-    
-    // Convert ArrayBuffers back to Tensors
-    const flatInputs = new Float32Array(data.data.inputsBuffer);
-    const flatTargets = new Float32Array(data.data.targetsBuffer);
-    
-    const xTrain = tf.tensor2d(flatInputs, data.data.inputShape, 'int32');
-    const yTrain = tf.tensor1d(flatTargets, 'int32');
-    
-    let currentEpoch = 0;
-    
-    // 1. Load or Create Model
-    if (!workerModel) {
-        workerModel = createModel(config);
-    }
-
-    // 2. Resumption Logic (Section 3.1)
-    if (data.command === 'RESUME') {
-        const checkpoint = await getLatestCheckpoint(taskId);
-        if (checkpoint) {
-            currentEpoch = checkpoint.stepNumber;
-            
-            // The file 2 snippet provided the weight serialization logic:
-            // weightData = weights.map(w => ({ name: w.name, data: w.dataSync(), dtype: w.dtype, shape: w.shape }))
-            const weightData = JSON.parse(new TextDecoder().decode(new Uint8Array(checkpoint.modelWeights)));
-            
-            const weights = weightData.map(w => ({
-                name: w.name,
-                data: tf.tensor(w.data, w.shape, w.dtype)
-            }));
-            workerModel.setWeights(weights);
-            
-            postMessage({ command: 'PROGRESS', epoch: currentEpoch, loss: checkpoint.currentLoss, progress: 'Restored Checkpoint' });
+            // read blob into ArrayBuffer then Float32Array
+            const blob = rec.modelWeights;
+            const ab = await blob.arrayBuffer();
+            const fa = new Float32Array(ab);
+            state.modelWeights = fa;
+            state.stepNumber = rec.stepNumber || 0;
+            state.targetEpochs = (rec.taskConfig && rec.taskConfig.targetEpochs) || state.targetEpochs;
+            state.saveInterval = (rec.taskConfig && rec.taskConfig.saveInterval) || state.saveInterval;
+            state.taskId = rec.taskId || state.taskId;
+            send({type:'resumed', step: state.stepNumber});
+            postProgress();
+            // start loop
+            runLoop().catch(e=>send({type:'log', text:'RunLoop failed after resume: '+e.message}));
+          } catch(err){
+            send({type:'log', text:'Resume failed: ' + (err && err.message)});
+            send({type:'checkpoint-error', error:serializeError(err)});
+          }
         }
-    }
-    
-    isTraining = true;
-    
-    try {
-        await workerModel.fit(xTrain, yTrain, {
-            epochs: config.epochs,
-            initialEpoch: currentEpoch, 
-            batchSize: config.batchSize,
-            callbacks: [
-                {
-                    // Runtime Checkpointing (Saving Progress)
-                    onEpochEnd: async (epoch, logs) => {
-                        if (!isTraining) {
-                            workerModel.stopTraining = true;
-                            return;
-                        }
-                        
-                        const currentEpoch = epoch + 1;
-                        
-                        // Send minimal progress update to main thread
-                        postMessage({ command: 'PROGRESS', epoch: currentEpoch, loss: logs.loss, progress: 'Epoch Complete' });
-                        
-                        // Save checkpoint at a regular, non-blocking interval (every 5 epochs)
-                        if (currentEpoch % 5 === 0 || currentEpoch === config.epochs) {
-                            const weights = workerModel.getWeights();
-                            const weightData = weights.map(w => ({
-                                name: w.name,
-                                data: w.dataSync(),
-                                dtype: w.dtype,
-                                shape: w.shape
-                            }));
-                            
-                            // Convert to ArrayBuffer for efficient storage
-                            const jsonWeights = new TextEncoder().encode(JSON.stringify(weightData));
-
-                            // Save operation must be transactional (handled in saveCheckpoint)
-                            await saveCheckpoint(taskId, currentEpoch, logs.loss, jsonWeights.buffer);
-                        }
-                    }
-                }
-            ]
-        });
-
-        // Only fire COMPLETE if it wasn't stopped manually
-        if (isTraining) { 
-            postMessage({ command: 'COMPLETE' });
+        break;
+      case 'pause':
+        state.paused = true;
+        send({type:'log', text:'Worker paused by main thread.'});
+        postProgress();
+        break;
+      case 'unpause':
+        state.paused = false;
+        send({type:'log', text:'Worker unpaused by main thread.'});
+        postProgress();
+        break;
+      case 'save-now':
+        try {
+          const meta = await checkpointNow();
+          send({type:'checkpoint-saved', meta});
+        } catch(err){
+          send({type:'checkpoint-error', error:serializeError(err)});
         }
-    } catch (e) {
-        if (e.message !== 'model.stopTraining is true.') {
-            // Worker Error Handling (Section 3.3)
-            postMessage({ command: 'ERROR', message: e.message });
-            console.error(e);
-        }
-    } finally {
-        isTraining = false;
-        // Clean up tensors
-        tf.disposeVariables();
+        break;
+      default:
+        send({type:'log', text:'Unknown command: ' + msg.type});
     }
-}
-
-// ====================================================================
-// Message Handler
-// ====================================================================
-
-self.onmessage = async (event) => {
-    const data = event.data;
-    switch (data.command) {
-        case 'START':
-        case 'RESUME':
-            await trainWorkerModel(data);
-            break;
-        case 'STOP':
-            isTraining = false;
-            if (workerModel) {
-                 workerModel.stopTraining = true;
-            }
-            break;
-        case 'CHECK_CHECKPOINT': // Used in Startup Flow (Section 3.1)
-            const checkpoint = await getLatestCheckpoint(data.taskId);
-            if (checkpoint) {
-                postMessage({ command: 'CHECKPOINT_FOUND', taskId: checkpoint.taskId, stepNumber: checkpoint.stepNumber });
-            } else {
-                postMessage({ command: 'NO_CHECKPOINT' });
-            }
-            break;
-        case 'DELETE_CHECKPOINT':
-            await deleteCheckpoint(data.taskId);
-            break;
-    }
+  } catch(err){
+    send({type:'log', text:'Unhandled worker exception: ' + (err && err.message)});
+    send({type:'checkpoint-error', error:serializeError(err)});
+  }
 };
+
+// initial ready message
+postMessage({type:'ready'});
+
