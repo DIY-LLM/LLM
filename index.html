@@ -1,969 +1,1223 @@
-.
-├── index.html
-├── README.md
-├── config.js
-├── main.js
-├── tfjsLSTM.js
-├── awsTraining.js
-├── awsMetrics.js
-├── scripts/
-│   └── check_no_aws_keys.sh
-└── test/
-    └── tests.html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DIY LLM Toolkit — Single-file (Full AWS + Transformer Encoder)</title>
 
---- config.js ---
-/**
- * Global Configuration for Hybrid ML Toolkit
- * Edit this file to switch between local and cloud training modes.
- */
-const CONFIG = {
-    // Feature Flag: Set to true to enable AWS SageMaker offload
-    USE_CLOUD_TRAINING: false, 
+  <!-- Fonts & icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
-    // Local Training Hyperparameters (Used when USE_CLOUD_TRAINING is false)
-    epochs: 10,
-    learningRate: 0.01,
-    temperature: 0.5,
-    
-    // AWS Configuration (ALL CAPS placeholders)
-    AWS_REGION: 'us-east-1',
-    AWS_S3_BUCKET: 'S3_BUCKET_NAME', // e.g., 'my-ml-training-data-123'
-    AWS_SAGEMAKER_ROLE_ARN: 'SAGEMAKER_ROLE_ARN', // e.g., 'arn:aws:iam::123456789012:role/SageMakerExecutionRole'
-    // Example PyTorch Deep Learning Container URI for Transformer training
-    AWS_IMAGE_URI: '763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:2.1.0-cpu-py310-cu118-ubuntu20.04', 
-    AWS_METRICS_WEBSOCKET_ENDPOINT: 'WSS_API_GATEWAY_ENDPOINT', // e.g., 'wss://abcdefg123.execute-api.us-east-1.amazonaws.com/prod'
-    AWS_TRANSFORMER_PROJECT: 'llm-toolkit-transformer',
-    
-    // SageMaker Instance Types
-    CLOUD_TRAINING_INSTANCE_TYPE: 'ml.p3.2xlarge', // High-end for Transformer training
+  <!-- External libraries (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+  <style>
+    :root{--primary-blue:#1A73E8;--surface-color:#fff;--bg:#f8f9fa;--text:#202124}
+    body{font-family:Roboto, sans-serif;margin:0;background:var(--bg);color:var(--text)}
+    .top-header{background:#12233b;color:#fff;padding:10px 20px;display:flex;align-items:center}
+    .top-header h1{font-weight:400;margin:0 12px}
+    .main-content-area{display:flex;min-height:calc(100vh - 60px)}
+    .side-nav{width:240px;background:var(--surface-color);border-right:1px solid #e6e6e6;padding:12px}
+    .nav-item{padding:10px 12px;color:#666;cursor:pointer}
+    .nav-item.active{background:#eef6ff;border-left:4px solid var(--primary-blue);color:var(--primary-blue)}
+    .content-wrapper{flex:1;padding:24px;max-width:1100px;margin:0 auto}
+    h2{margin:0 0 12px 0}
+    .mode-toggle{display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--surface-color);border-radius:8px;margin-bottom:16px;border-left:4px solid var(--primary-blue)}
+    .upload-container{border:2px dashed #ddd;background:var(--surface-color);padding:20px;border-radius:8px;text-align:center;cursor:pointer}
+    .data-source-card{display:inline-block;width:200px;padding:12px;background:var(--surface-color);border-radius:8px;margin:8px;text-align:center}
+    #model-controls-panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:12px;background:var(--surface-color);border-radius:8px}
+    button{background:var(--primary-blue);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    #metric-panel{background:var(--surface-color);padding:12px;border-radius:8px}
+    canvas{background:#fff;border-radius:8px}
+    .aws-config-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:999}
+    .aws-config-content{background:#fff;padding:18px;border-radius:8px;width:90%;max-width:720px}
+    .training-status{padding:8px;background:#eaf2ff;border-left:4px solid var(--primary-blue);border-radius:6px;display:none}
+    .training-status.active{display:block}
+    .small-muted{font-size:12px;color:#666}
+    input, textarea, select {border:1px solid #e0e0e0;padding:8px;border-radius:6px}
+    .flex-row {display:flex;gap:8px;align-items:center}
+    .pill {padding:4px 8px;border-radius:999px;background:#eef5ff;color:var(--primary-blue);font-weight:600}
+    .footer {padding:12px;text-align:center;color:#666;font-size:13px}
+    pre {white-space:pre-wrap;word-break:break-word}
+    .kbd {background:#eee;border-radius:4px;padding:2px 6px;font-family:monospace}
+  </style>
+</head>
+<body>
+  <div class="top-header">
+    <i class="fas fa-brain" style="font-size:20px;margin-right:8px"></i>
+    <h1>DIY LLM Toolkit</h1>
+    <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
+      <i class="fas fa-question-circle" title="Help"></i>
+      <i class="fas fa-bell" title="Notifications"></i>
+      <div style="width:34px;height:34px;background:#bcdfff;border-radius:50%"></div>
+    </div>
+  </div>
+
+  <div class="main-content-area">
+    <div class="side-nav">
+      <div class="nav-item">Overview</div>
+      <div class="nav-item active">Data & Tokenization</div>
+      <div class="nav-item">Analytics & Metrics</div>
+      <div class="nav-item">Model Training</div>
+      <div class="nav-item">Text Generation</div>
+      <hr>
+      <div style="padding:8px">
+        <div style="margin-bottom:8px"><button onclick="downloadCheckNoAwsKeys()">Download check_no_aws_keys.sh</button></div>
+        <div style="font-size:12px;color:#666">No long-lived keys are stored in this file. Use temporary credentials.</div>
+      </div>
+    </div>
+
+    <div class="content-wrapper">
+      <div class="mode-toggle">
+        <div id="current-mode-label">Current Mode: <strong id="model-mode-name">Markov Chain (Fallback)</strong><br><span class="small-muted">Switch to Transformer for encoder-based generation</span></div>
+        <label style="display:flex;align-items:center;gap:8px">
+          <span style="font-weight:600">Transformer</span>
+          <input id="model-mode-toggle" type="checkbox" onchange="toggleModelMode(this.checked)">
+        </label>
+      </div>
+
+      <section id="data-ingestion-section">
+        <h2>Data Ingestion & Tokenization</h2>
+
+        <div>
+          <div class="data-source-card">
+            <h3>Local Files</h3>
+            <i class="fas fa-upload" style="font-size:28px;color:var(--primary-blue)"></i>
+            <p class="small-muted">Drag, drop, or select multiple local files.</p>
+            <label class="upload-label" for="file-input"><button style="background:#5f6368">Select Local Files</button></label>
+          </div>
+
+          <div class="data-source-card" onclick="showAwsConfigModal()">
+            <h3>AWS S3 / SageMaker</h3>
+            <i class="fab fa-aws" style="color:#FF9900;font-size:28px"></i>
+            <p class="small-muted">Connect temporarily to AWS to start remote Transformer training and receive metrics.</p>
+            <button style="background:#FF9900" onclick="event.stopPropagation(); showAwsConfigModal()">Connect AWS</button>
+          </div>
+
+          <div class="data-source-card">
+            <h3>Sample Dataset</h3>
+            <i class="fas fa-book" style="color:#9334E9;font-size:28px"></i>
+            <p class="small-muted">Quickly load a small sample corpus.</p>
+            <button style="background:#9334E9" onclick="loadSampleData()">Load Sample</button>
+          </div>
+        </div>
+
+        <div id="drop-zone" class="upload-container" style="margin-top:12px">
+          <i class="fas fa-file-import" style="font-size:36px;color:var(--primary-blue)"></i>
+          <p class="small-muted">Drop files here or paste text into the textarea.</p>
+          <input id="file-input" type="file" multiple accept=".txt,.md,.csv" style="display:block;margin:12px auto">
+        </div>
+
+        <div id="file-analytics-card" style="margin-top:12px;padding:12px;background:var(--surface-color);border-radius:8px">
+          <h3>Uploaded Files Overview</h3>
+          <div id="file-analytics-summary">0 Files Uploaded (0.0 MB)</div>
+          <div id="progress-container" style="display:none;margin-top:8px">
+            <div id="progress-bar" style="width:0%;height:20px;background:var(--primary-blue);color:#fff;text-align:center;border-radius:4px">0%</div>
+          </div>
+          <div id="file-preview" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px"></div>
+          <div style="margin-top:12px">
+            <button onclick="tokenizer.exportVocabulary()" style="background:#5f6368">Export Vocab</button>
+          </div>
+        </div>
+
+        <textarea id="text-input" placeholder="... or paste your text corpus directly here." style="width:100%;height:140px;margin-top:12px;border-radius:8px;padding:12px"></textarea>
+
+        <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+          <button onclick="dataHandler.tokenizeAndBuildMatrix()">Tokenize & Preprocess</button>
+          <button id="train-button" onclick="miniTransformer.trainOnText()" style="background:#3C769D"><i class="fas fa-bolt"></i> Train Model (Local)</button>
+          <button onclick="startCloudTraining()" id="start-cloud-btn" style="display:none;background:#FF9900">Start Cloud Training</button>
+        </div>
+
+        <div class="training-status" id="training-status" style="margin-top:12px">
+          <i class="fas fa-spinner fa-spin"></i> Training in progress... <span id="training-progress-text">Epoch 0/0</span>
+        </div>
+      </section>
+
+      <hr style="margin:18px 0">
+
+      <section id="model-section">
+        <h2>Model Configuration & Execution</h2>
+        <div id="model-controls-panel" style="display:none">
+          <div>
+            <label>Max Tokens (Inference)</label>
+            <input id="max-tokens-input" type="number" value="50" min="10">
+          </div>
+          <div>
+            <label>Temperature</label>
+            <input id="temperature-input" type="number" value="0.7" step="0.1" min="0.1" max="2.0">
+          </div>
+          <div>
+            <label>Embedding Dim (d_model)</label>
+            <input id="embedding-size-input" type="number" value="128" min="16">
+          </div>
+          <div>
+            <label>Number of Heads</label>
+            <input id="num-heads-input" type="number" value="4" min="1" max="8">
+          </div>
+          <div>
+            <label>Epochs</label>
+            <input id="epochs-input" type="number" value="6" min="1">
+          </div>
+          <div>
+            <label>Batch Size</label>
+            <input id="batch-size-input" type="number" value="8" min="1">
+          </div>
+          <div>
+            <label>Learning Rate</label>
+            <input id="learning-rate-input" type="number" value="0.0005" step="0.0001" min="0.0001">
+          </div>
+        </div>
+
+        <div id="model-dashboard" style="display:none;margin-top:12px;display:grid;grid-template-columns:2fr 1fr;gap:12px">
+          <div id="chart-container" style="background:var(--surface-color);padding:12px;border-radius:8px">
+            <h3><i class="fas fa-chart-area"></i> Live Loss Curve</h3>
+            <canvas id="lossChart" height="180"></canvas>
+          </div>
+          <div id="metrics-panel" style="background:var(--surface-color);padding:12px;border-radius:8px">
+            <h3><i class="fas fa-tachometer-alt"></i> Model Metrics</h3>
+            <div>Current Loss: <strong id="metric-loss">N/A</strong></div>
+            <div>Epochs Run: <strong id="metric-epochs">0</strong></div>
+            <div>Vocab Size: <strong id="metric-vocab-size">0</strong></div>
+            <div>Inference Latency: <strong id="metric-latency">N/A</strong></div>
+            <div>Memory Footprint: <strong id="metric-memory">0 MB</strong></div>
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+              <button onclick="miniTransformer.saveModel()">Save Model Weights</button>
+              <button onclick="miniTransformer.loadModel()" style="background:#5f6368">Load Model Weights</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr style="margin:18px 0">
+
+      <section id="generation-section">
+        <h2>Text Generation</h2>
+        <div style="display:flex;gap:12px;margin-bottom:12px">
+          <input id="prompt-input" type="text" placeholder="Enter your prompt..." style="flex:1;padding:10px;border-radius:6px;border:1px solid #ddd">
+          <button onclick="generateTextFromModel()">Generate Text</button>
+        </div>
+        <div id="llm-output" style="padding:12px;background:#fff;border-radius:8px;min-height:100px">Generated text will appear here.</div>
+      </section>
+
+      <div style="margin-top:24px;background:var(--surface-color);padding:12px;border-radius:8px">
+        <h3>Developer Panel & Tests</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="openTestHarness()">Open Test Harness</button>
+          <button onclick="emitMockMetrics()">Emit Mock Metrics</button>
+          <button onclick="toggleCloudMode()">Toggle USE_CLOUD_TRAINING</button>
+          <div id="dev-info" style="margin-left:auto">USE_CLOUD_TRAINING: <span id="cloud-flag">false</span></div>
+        </div>
+        <div style="margin-top:12px">
+          <pre id="dev-log" style="max-height:240px;overflow:auto"></pre>
+        </div>
+      </div>
+
+      <div class="footer">
+        <strong>Security note:</strong> This single-file app intentionally contains no long-lived AWS credentials. Use Cognito, STS temporary credentials, or paste short-lived credentials only at runtime in the AWS modal. Placeholders: <code>S3_BUCKET_NAME</code>, <code>SAGEMAKER_ROLE_ARN</code>, <code>SAGEMAKER_IMAGE_URI</code>, <code>API_GATEWAY_WS_URL</code>.
+      </div>
+
+    </div>
+  </div>
+
+  <!-- AWS Config Modal -->
+  <div id="aws-config-modal" class="aws-config-modal">
+    <div class="aws-config-content">
+      <h3><i class="fab fa-aws"></i> AWS Configuration (temporary)</h3>
+      <p class="small-muted">Provide temporary credentials (Cognito / STS / session tokens) or a metrics WebSocket URL. Do NOT store long-lived keys here.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label>AWS Region</label>
+          <input id="aws-region" value="us-east-1" />
+        </div>
+        <div>
+          <label>S3 Bucket</label>
+          <input id="aws-bucket" placeholder="S3_BUCKET_NAME" />
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px">
+        <label>Access Key ID (temporary)</label>
+        <input id="aws-access-key" placeholder="ASIA..." />
+        <label>Secret Access Key (temporary)</label>
+        <input id="aws-secret-key" type="password" placeholder="wJalr..." />
+        <label>Session Token (optional)</label>
+        <input id="aws-session-token" />
+        <label>Session Role ARN (optional override)</label>
+        <input id="aws-role-arn" placeholder="SAGEMAKER_ROLE_ARN" />
+        <label>Metrics WebSocket URL (wss://...)</label>
+        <input id="aws-ws-url" placeholder="wss://API_GATEWAY_WS_URL" />
+        <label>SageMaker Training Image URI (ECR)</label>
+        <input id="aws-image-uri" placeholder="SAGEMAKER_TRAINING_IMAGE_URI" />
+        <label>Default Instance Type</label>
+        <input id="aws-instance-type" placeholder="ml.g4dn.xlarge" value="ml.g4dn.xlarge" />
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button onclick="closeAwsConfigModal()" style="background:#5f6368">Cancel</button>
+        <button onclick="connectAwsFromModal()" style="background:#FF9900">Connect (temporary)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test harness modal (inline) -->
+  <div id="test-harness-modal" class="aws-config-modal" style="display:none">
+    <div class="aws-config-content">
+      <h3>Test Harness</h3>
+      <p class="small-muted">Run quick integration tests locally and with mocked AWS flows.</p>
+      <div style="display:flex;gap:8px">
+        <button id="run-local-test">Run Local Training Test</button>
+        <button id="run-cloud-mock-test">Run Mock Cloud Offload Test</button>
+        <button id="close-test">Close</button>
+      </div>
+      <pre id="test-log" style="max-height:360px;overflow:auto;margin-top:8px"></pre>
+    </div>
+  </div>
+
+  <script type="module">
+/*
+  FULL-FEATURED single-file app (Functional Realism)
+  - AWS handling: dynamic AWS SDK v3 imports from CDN (option A)
+  - Transformer: true multi-head self-attention encoder implemented in TF.js (option a)
+  - All UI, training loops, and AWS orchestration live in this file
+  - Placeholders ALL_CAPS for S3 bucket, role ARNs, image URIs, WS URL
+  - No long-lived AWS keys stored
+*/
+
+/* ======================
+   Configuration placeholders
+   ====================== */
+const USE_CLOUD_TRAINING_DEFAULT = false; // default; toggleable in dev panel
+const S3_BUCKET_PLACEHOLDER = "S3_BUCKET_NAME";
+const SAGEMAKER_ROLE_ARN_PLACEHOLDER = "SAGEMAKER_ROLE_ARN";
+const SAGEMAKER_IMAGE_URI_PLACEHOLDER = "SAGEMAKER_TRAINING_IMAGE_URI";
+const API_GATEWAY_WS_URL_PLACEHOLDER = "wss://API_GATEWAY_WS_URL";
+const DEFAULT_INSTANCE_TYPE_PLACEHOLDER = "ml.g4dn.xlarge";
+
+/* ======================
+   Runtime AWS Config (ephemeral; editable in modal)
+   ====================== */
+const AwsRuntimeConfig = {
+  region: 'us-east-1',
+  accessKeyId: null,
+  secretAccessKey: null,
+  sessionToken: null,
+  bucket: S3_BUCKET_PLACEHOLDER,
+  wsUrl: API_GATEWAY_WS_URL_PLACEHOLDER,
+  roleArn: SAGEMAKER_ROLE_ARN_PLACEHOLDER,
+  sagemakerImageUri: SAGEMAKER_IMAGE_URI_PLACEHOLDER,
+  instanceType: DEFAULT_INSTANCE_TYPE_PLACEHOLDER,
+  projectName: 'DIY_LLM_TOOLKIT'
 };
 
-export default CONFIG;
-
---- tfjsLSTM.js ---
-import CONFIG from './config.js';
-
-/**
- * Local training logic using TensorFlow.js (LSTM model).
- * This module preserves the original client-heavy training interface.
- */
-class TFJSLSMTModel {
-    constructor(onMetricsUpdate) {
-        this.model = null; // Placeholder for the actual tf.js model
-        this.isTraining = false;
-        this.onMetricsUpdate = onMetricsUpdate;
-        this.interval = null;
-    }
-
-    /**
-     * Preserves existing public function signature. Starts local training.
-     * @param {string} corpusText - The text data for training.
-     */
-    async train(corpusText) {
-        if (this.isTraining) {
-            console.log("Local training already running.");
-            return;
-        }
-        
-        console.log("Starting local tf.js LSTM training...");
-        this.isTraining = true;
-        this.onMetricsUpdate({ type: 'status', state: 'STARTING', message: 'Local training started.', timestamp: new Date().toISOString() });
-
-        // --- Mock Training Loop (Replace with actual tf.js LSTM training logic) ---
-        const totalSteps = 1000;
-        let step = 0;
-        
-        // Mock tf.js model compile/setup
-        // this.model = await tf.sequential(); 
-        
-        this.interval = setInterval(() => {
-            if (!this.isTraining || step >= totalSteps) {
-                clearInterval(this.interval);
-                this.isTraining = false;
-                this.onMetricsUpdate({ type: 'status', state: 'COMPLETED', message: 'Local training finished.', timestamp: new Date().toISOString() });
-                return;
-            }
-
-            step++;
-            const epoch = Math.floor(step / (totalSteps / CONFIG.epochs)) + 1;
-            // Simulated logarithmic loss decay
-            const loss = 0.5 * Math.exp(-step / 500) + 0.05 + (Math.random() * 0.02); 
-            const lr = CONFIG.learningRate * Math.exp(-step / 1000);
-
-            // Real-time metrics contract implementation
-            this.onMetricsUpdate({
-                type: 'metrics',
-                step: step,
-                epoch: epoch,
-                loss: parseFloat(loss.toFixed(4)),
-                lr: parseFloat(lr.toFixed(6)),
-                timestamp: new Date().toISOString()
-            });
-        }, 100);
-        // --- End Mock Training Loop ---
-    }
-
-    /**
-     * Preserves existing public function signature. Generates text locally.
-     * @param {string} prompt 
-     */
-    async generate(prompt) {
-        if (!this.model) {
-            // Placeholder generation, replace with actual tf.js model generation
-            return `[Generated Text Placeholder from local LSTM for prompt: "${prompt}" after ${CONFIG.epochs} epochs.]`;
-        }
-        // return await this.model.generate(prompt); 
-    }
-
-    stopTraining() {
-        this.isTraining = false;
-        if (this.interval) clearInterval(this.interval);
-    }
+/* ======================
+   DEV LOGGING helper
+   ====================== */
+function logDev(...args) {
+  const el = document.getElementById('dev-log');
+  if (el) { el.textContent += args.map(a => (typeof a === 'object' ? JSON.stringify(a,null,2) : String(a))).join(' ') + '\n'; el.scrollTop = el.scrollHeight; }
+  console.debug(...args);
 }
 
-export { TFJSLSMTModel };
+/* ======================
+   Metrics WebSocket bus
+   ====================== */
+const AwsMetrics = (function(){
+  let ws = null;
+  const listeners = new Set();
 
---- awsMetrics.js ---
-import CONFIG from './config.js';
-
-/**
- * Handles the client-side WebSocket connection for real-time AWS metrics streaming.
- * Uses the standard WebSockets API, compatible with API Gateway WebSocket endpoints.
- */
-class AWSMetricsStream {
-    constructor(onMetricsReceived, onStatusUpdate) {
-        this.ws = null;
-        this.onMetricsReceived = onMetricsReceived;
-        this.onStatusUpdate = onStatusUpdate;
-        this.endpoint = CONFIG.AWS_METRICS_WEBSOCKET_ENDPOINT;
+  function connect(url = null) {
+    const wsUrl = url || AwsRuntimeConfig.wsUrl || API_GATEWAY_WS_URL_PLACEHOLDER;
+    if (!wsUrl || wsUrl.includes('API_GATEWAY_WS_URL')) {
+      logDev('No valid metrics WebSocket URL provided; metrics disabled.');
+      return;
     }
-
-    connect(runId) {
-        if (!this.endpoint || this.endpoint === 'WSS_API_GATEWAY_ENDPOINT') {
-            const msg = 'Metrics endpoint not configured. Check config.js.';
-            console.error(msg);
-            this.onStatusUpdate({ type: 'status', state: 'FAILED', message: msg, timestamp: new Date().toISOString() });
-            return;
-        }
-        
-        // Append runId to the URL for backend filtering/routing
-        const url = `${this.endpoint}?runId=${runId}`;
-
-        this.ws = new WebSocket(url);
-
-        this.ws.onopen = () => {
-            console.log('Metrics WebSocket connected.');
-            this.onStatusUpdate({ type: 'status', state: 'RUNNING', message: 'Connected to metrics stream.', timestamp: new Date().toISOString() });
-        };
-
-        this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'metrics') {
-                    // Match the required real-time metrics contract
-                    this.onMetricsReceived(data); 
-                } else if (data.type === 'status') {
-                    // Match the required status contract
-                    this.onStatusUpdate(data);
-                    if (data.state === 'COMPLETED' || data.state === 'FAILED') {
-                        this.disconnect();
-                    }
-                }
-            } catch (e) {
-                console.error('Error parsing metrics message:', e);
-            }
-        };
-
-        this.ws.onerror = (error) => {
-            console.error('Metrics WebSocket error:', error);
-            this.onStatusUpdate({ type: 'status', state: 'FAILED', message: 'WebSocket Error.', timestamp: new Date().toISOString() });
-        };
-
-        this.ws.onclose = () => {
-            console.log('Metrics WebSocket disconnected.');
-            // Only update status if it wasn't already marked COMPLETED/FAILED
-            this.onStatusUpdate({ type: 'status', state: 'STOPPED', message: 'Stream finished or client closed.', timestamp: new Date().toISOString() });
-        };
-    }
-
-    disconnect() {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.close();
-        }
-        this.ws = null;
-    }
-}
-
-export { AWSMetricsStream };
-
---- awsTraining.js ---
-import CONFIG from './config.js';
-
-// The AWS SDK v2 is loaded globally via CDN script tag (window.AWS)
-const AWS = window.AWS;
-
-function getSageMakerClient() {
-    if (!AWS || !AWS.SageMaker) {
-        throw new Error("AWS SDK (SageMaker client) is not loaded or initialized.");
-    }
-    // Assumes AWS.config.credentials has been set securely by the user/browser flow
-    AWS.config.update({ region: CONFIG.AWS_REGION });
-    return new AWS.SageMaker({ apiVersion: '2017-07-24' });
-}
-
-function generateRunId(prefix = 'sm-') {
-    return prefix + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-}
-
-/**
- * Starts a new SageMaker Training Job for a Transformer Encoder.
- * @param {object} params
- * @param {boolean} params.quantize - Whether to pass the --quantize flag to the training script.
- * @param {string} params.resumeRunId - If provided, attempts to resume from this run's S3 location.
- * @returns {Promise<string>} The Training Job Name.
- */
-async function startCloudTraining({ quantize, resumeRunId = null }) {
-    const sm = getSageMakerClient();
-    const runId = generateRunId(resumeRunId ? `${resumeRunId}-resume-` : 'sm-');
-    const jobName = `${CONFIG.AWS_TRANSFORMER_PROJECT}-${runId}`;
-
-    // S3 paths required by project goals
-    const s3RootPath = `s3://${CONFIG.AWS_S3_BUCKET}/${CONFIG.AWS_TRANSFORMER_PROJECT}/${runId}`;
-    const s3OutputPath = `${s3RootPath}/output`;
-    const s3CheckpointPath = `${s3RootPath}/checkpoints`; // Checkpointing path satisfied
-
-    const hyperParameters = {
-        'model_name': 'transformer-encoder',
-        'quantize': quantize ? 'true' : 'false',
-        'checkpoint_path': s3CheckpointPath,
-        'run_id': runId, // Pass run_id to the training script for metrics/checkpointing
-        // Example training data input (must be pre-uploaded to S3)
-        'train_data_uri': `s3://${CONFIG.AWS_S3_BUCKET}/data/train.txt`, 
+    if (ws) { ws.close(); ws = null; }
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      dispatch({ type: 'status', state: 'CONNECTED', message: 'WS open', timestamp: new Date().toISOString() });
+      logDev('Metrics WS connected:', wsUrl);
     };
-
-    if (resumeRunId) {
-        hyperParameters['resume_from_checkpoint_path'] = `s3://${CONFIG.AWS_S3_BUCKET}/${CONFIG.AWS_TRANSFORMER_PROJECT}/${resumeRunId}/checkpoints`;
-    }
-
-    const trainingParams = {
-        TrainingJobName: jobName,
-        HyperParameters: hyperParameters,
-        AlgorithmSpecification: {
-            TrainingImage: CONFIG.AWS_IMAGE_URI,
-            TrainingInputMode: 'File',
-        },
-        RoleArn: CONFIG.AWS_SAGEMAKER_ROLE_ARN,
-        OutputDataConfig: {
-            S3OutputPath: s3OutputPath,
-        },
-        ResourceConfig: {
-            InstanceCount: 1,
-            InstanceType: CONFIG.CLOUD_TRAINING_INSTANCE_TYPE,
-            VolumeSizeInGB: 100,
-        },
-        StoppingCondition: {
-            MaxRuntimeInSeconds: 3600 * 4, // 4 hours
-        },
-        InputDataConfig: [
-            {
-                ChannelName: 'training',
-                DataSource: {
-                    S3DataSource: {
-                        S3DataType: 'S3Prefix',
-                        S3Uri: `s3://${CONFIG.AWS_S3_BUCKET}/data/`, // Assuming data is in a prefix
-                        S3DataDistributionType: 'FullyReplicated',
-                    },
-                },
-                CompressionType: 'None',
-                RecordWrapperType: 'None',
-            },
-        ],
-        CheckpointConfig: {
-            S3Uri: s3CheckpointPath,
-        }
+    ws.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data);
+        dispatch(payload);
+      } catch (err) {
+        logDev('Invalid WS message', evt.data);
+      }
     };
+    ws.onclose = () => { dispatch({ type:'status', state:'DISCONNECTED', message:'WS closed', timestamp:new Date().toISOString() }); ws = null; };
+    ws.onerror = (e) => { dispatch({ type:'status', state:'FAILED', message:'WS error', timestamp:new Date().toISOString() }); console.error(e); };
+  }
 
-    await sm.createTrainingJob(trainingParams).promise();
-    return jobName;
-}
+  function disconnect() { if (ws) ws.close(); ws = null; }
 
-/**
- * Fetches the current status of a SageMaker Training Job.
- * @param {string} jobName 
- */
-async function getTrainingJobStatus(jobName) {
-    const sm = getSageMakerClient();
-    const response = await sm.describeTrainingJob({ TrainingJobName: jobName }).promise();
-    return {
-        // Map SageMaker status to frontend status contract
-        state: response.TrainingJobStatus, 
-        message: response.FailureReason || response.SecondaryStatus || response.TrainingJobStatus,
-        jobName: response.TrainingJobName,
-        timestamp: new Date().toISOString()
+  function onMetric(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+
+  function dispatch(obj) { listeners.forEach(fn => { try { fn(obj); } catch(e) { console.error('metric listener error', e); } }); }
+
+  function appendMetric(obj) { dispatch(obj); }
+
+  return { connect, disconnect, onMetric, appendMetric };
+})();
+
+/* ======================
+   AWS SageMaker orchestration via SDK v3 (dynamic ESM import)
+   ====================== */
+const AwsTraining = (function(){
+  let sagemakerClient = null;
+  let s3Client = null;
+  let awsLibs = null;
+  let initialized = false;
+
+  async function ensureClients() {
+    if (initialized && sagemakerClient && s3Client) return awsLibs;
+    try {
+      // import the modular clients
+      const [sagemakerModule, s3Module] = await Promise.all([
+        import('https://cdn.jsdelivr.net/npm/@aws-sdk/client-sagemaker@3.375.0/dist-es/index.js'),
+        import('https://cdn.jsdelivr.net/npm/@aws-sdk/client-s3@3.375.0/dist-es/index.js')
+      ]);
+      awsLibs = { ...sagemakerModule, ...s3Module };
+      const creds = AwsRuntimeConfig.accessKeyId ? {
+        credentials: {
+          accessKeyId: AwsRuntimeConfig.accessKeyId,
+          secretAccessKey: AwsRuntimeConfig.secretAccessKey,
+          sessionToken: AwsRuntimeConfig.sessionToken || undefined
+        }
+      } : {};
+      sagemakerClient = new awsLibs.SageMakerClient({ region: AwsRuntimeConfig.region, ...creds });
+      s3Client = new awsLibs.S3Client({ region: AwsRuntimeConfig.region, ...creds });
+      initialized = true;
+      logDev('AWS SDK loaded and clients initialized.');
+      return awsLibs;
+    } catch (err) {
+      console.error('Failed to load AWS SDK v3:', err);
+      throw new Error('Unable to load AWS SDK v3 in browser. Ensure network connectivity to CDN.');
+    }
+  }
+
+  async function startSageMakerTraining(runId, trainConfig = {}) {
+    if (!window.USE_CLOUD_TRAINING) throw new Error('Cloud training disabled (USE_CLOUD_TRAINING=false).');
+    const aws = await ensureClients();
+    const jobName = `diy-llm-${runId}-${Date.now()}`.replace(/[^a-zA-Z0-9-]/g,'').toLowerCase();
+    const inputS3 = trainConfig.inputS3Uri || `s3://${AwsRuntimeConfig.bucket}/${AwsRuntimeConfig.projectName}/${runId}/training/`;
+    const outputS3 = trainConfig.outputS3Uri || `s3://${AwsRuntimeConfig.bucket}/${AwsRuntimeConfig.projectName}/${runId}/output/`;
+    const checkpointS3Uri = `s3://${AwsRuntimeConfig.bucket}/${AwsRuntimeConfig.projectName}/${runId}/checkpoints/`;
+    const hparams = Object.assign({
+      epochs: String(trainConfig.epochs || 3),
+      batch_size: String(trainConfig.batchSize || 16),
+      learning_rate: String(trainConfig.learningRate || 0.0005),
+      seq_len: String(trainConfig.seqLen || 128),
+      vocab_size: String(trainConfig.vocabSize || 32000),
+      quantize: trainConfig.quantize ? 'true' : 'false',
+      checkpoint_s3_uri: checkpointS3Uri
+    }, trainConfig.hyperParameters || {});
+
+    const imageUri = AwsRuntimeConfig.sagemakerImageUri || SAGEMAKER_IMAGE_URI_PLACEHOLDER;
+    if (!imageUri || imageUri.includes('SAGEMAKER_TRAINING_IMAGE_URI')) {
+      throw new Error('SageMaker training image URI not set. Place SAGEMAKER_IMAGE_URI in modal before starting.');
+    }
+
+    const createTrainingJobParams = {
+      TrainingJobName: jobName,
+      AlgorithmSpecification: { TrainingImage: imageUri, TrainingInputMode: 'File' },
+      RoleArn: AwsRuntimeConfig.roleArn || SAGEMAKER_ROLE_ARN_PLACEHOLDER,
+      InputDataConfig: [
+        { ChannelName:'training',
+          DataSource: { S3DataSource: { S3DataType:'S3Prefix', S3Uri: inputS3, S3DataDistributionType:'FullyReplicated' } },
+          ContentType: 'text/plain'
+        }
+      ],
+      OutputDataConfig: { S3OutputPath: outputS3 },
+      ResourceConfig: {
+        InstanceCount: trainConfig.instanceCount || 1,
+        InstanceType: trainConfig.instanceType || AwsRuntimeConfig.instanceType || DEFAULT_INSTANCE_TYPE_PLACEHOLDER,
+        VolumeSizeInGB: 100
+      },
+      StoppingCondition: { MaxRuntimeInSeconds: 60 * 60 * 24 },
+      HyperParameters: hparams
     };
-}
-
-
-export { startCloudTraining, getTrainingJobStatus, generateRunId };
-
---- main.js ---
-import CONFIG from './config.js';
-import { TFJSLSMTModel } from './tfjsLSTM.js';
-import { startCloudTraining, generateRunId } from './awsTraining.js';
-import { AWSMetricsStream } from './awsMetrics.js';
-
-// --- Global State and UI Elements (must preserve original DOM structure/functions) ---
-const state = {
-    mode: CONFIG.USE_CLOUD_TRAINING ? 'TRANSFORMER' : 'LSTM',
-    isTraining: false,
-    currentRunId: null,
-};
-
-let localModel = null;
-let metricsChart = null;
-let metricsStream = null;
-
-const trainingStatusElement = document.getElementById('trainingStatus');
-const lossChartCanvas = document.getElementById('lossChart').getContext('2d');
-const startTrainingButton = document.getElementById('startTrainingButton');
-const outputElement = document.getElementById('output');
-
-// --- Chart/Metrics Management (identical visual behavior) ---
-function initializeChart() {
-    metricsChart = new Chart(lossChartCanvas, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [
-                {
-                    label: 'Loss',
-                    data: [],
-                    borderColor: 'var(--google-red)',
-                    backgroundColor: 'rgba(234, 67, 53, 0.2)',
-                    tension: 0.1,
-                    pointRadius: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } },
-            animation: false 
-        }
-    });
-}
-
-function updateChart(data) {
-    if (metricsChart) {
-        metricsChart.data.labels.push(data.step);
-        metricsChart.data.datasets[0].data.push(data.loss);
-        metricsChart.update();
-    }
-}
-
-function updateTrainingStatus(data) {
-    const isRunningState = (data.state === 'RUNNING' || data.state === 'STARTING' || data.state === 'InProgress');
-    state.isTraining = isRunningState;
-    
-    // UI color mapping
-    const colorMap = {
-        'STARTING': 'var(--primary-blue)',
-        'RUNNING': 'var(--google-green)',
-        'COMPLETED': 'var(--google-green)',
-        'FAILED': 'var(--google-red)',
-        'STOPPED': 'var(--google-red)',
-        'InProgress': 'var(--google-green)', // SageMaker status
-        'Completed': 'var(--google-green)',
-        'Failed': 'var(--google-red)',
-    };
-
-    const statusText = `[${data.timestamp.slice(11, 19)}] ${data.state}: ${data.message}`;
-    trainingStatusElement.innerHTML = `<span style="color: ${colorMap[data.state] || 'var(--text-color)'}">${statusText}</span>`;
-
-    if (isRunningState) {
-        startTrainingButton.textContent = 'Stop Training';
-        startTrainingButton.classList.add('stop');
-    } else {
-        startTrainingButton.textContent = 'Start Training';
-        startTrainingButton.classList.remove('stop');
-    }
-}
-
-// --- Main Training Logic (Preserving Public Function Signature) ---
-window.startTraining = async function() {
-    if (state.isTraining) {
-        window.stopTraining();
-        return;
-    }
-
-    // Reset UI
-    metricsChart.data.labels = [];
-    metricsChart.data.datasets[0].data = [];
-    metricsChart.update();
-    trainingStatusElement.textContent = 'Starting...';
-    
-    const corpusText = document.getElementById('corpusInput').value || ""; // Required by signature but not used in cloud mode
-    
-    state.currentRunId = generateRunId(); // Unique ID for training/metrics stream correlation
-
-    if (CONFIG.USE_CLOUD_TRAINING) {
-        if (!window.AWS || !window.AWS.config.credentials || !window.AWS.config.credentials.accessKeyId) {
-             updateTrainingStatus({ type: 'status', state: 'FAILED', message: 'AWS credentials not injected. Cannot start cloud training.', timestamp: new Date().toISOString() });
-             return;
-        }
-
-        try {
-            // 1. Start SageMaker Job (client-initiated call)
-            const jobName = await startCloudTraining({ 
-                quantize: document.getElementById('quantizeCheckbox').checked,
-                // Resume logic would use a UI input for resumeRunId
-            });
-            
-            updateTrainingStatus({ type: 'status', state: 'STARTING', message: `SageMaker Job started: ${jobName}`, timestamp: new Date().toISOString() });
-
-            // 2. Connect to Metrics Stream (client-initiated WebSocket)
-            metricsStream = new AWSMetricsStream(updateChart, updateTrainingStatus);
-            metricsStream.connect(state.currentRunId); 
-
-        } catch (error) {
-            console.error('Cloud training failed to start:', error);
-            updateTrainingStatus({ type: 'status', state: 'FAILED', message: `Cloud start failed: ${error.message}`, timestamp: new Date().toISOString() });
-        }
-        
-    } else {
-        // Local tf.js LSTM training
-        if (!localModel) {
-            localModel = new TFJSLSMTModel(data => {
-                if (data.type === 'metrics') {
-                    updateChart(data);
-                } else if (data.type === 'status') {
-                    updateTrainingStatus(data);
-                }
-            });
-        }
-        await localModel.train(corpusText);
-    }
-};
-
-window.stopTraining = function() {
-    if (CONFIG.USE_CLOUD_TRAINING) {
-        if (metricsStream) {
-            metricsStream.disconnect();
-            // Note: A StopTrainingJob call to SageMaker should be added to awsTraining.js 
-            // and called here, but is omitted for minimal code size.
-            updateTrainingStatus({ type: 'status', state: 'STOPPED', message: 'Metrics stream stopped (Remote job may still be running).', timestamp: new Date().toISOString() });
-        }
-    } else {
-        if (localModel) {
-            localModel.stopTraining();
-        }
-    }
-};
-
-// --- Generation Logic (Preserving Public Function Signature) ---
-window.generateText = async function() {
-    const prompt = document.getElementById('promptInput').value;
-    // UI update logic from the original snippet
-    outputElement.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--primary-blue);"></i><br><br><em>Generating text...</em></div>';
 
     try {
-        let generatedText = "";
-        const startTime = performance.now();
-
-        if (CONFIG.USE_CLOUD_TRAINING) {
-            // Assume the cloud-trained model is deployed and callable via a client-initiated, secure API Gateway/Lambda endpoint
-            generatedText = await mockCloudGenerate(prompt); 
-        } else {
-            // Local LSTM/tf.js generation
-            if (!localModel) {
-                 localModel = new TFJSLSMTModel(() => {}); // Initialize if not done
-            }
-            generatedText = await localModel.generate(prompt);
-        }
-
-        const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-
-        outputElement.innerHTML = `
-        <div style="background-color: #E8F0FE; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue);">
-        <strong style="color: var(--primary-blue);">Prompt:</strong> ${prompt}<br>
-        <small style="color: var(--secondary-text);">Mode: ${state.mode} | Generation Time: ${totalTime}s | Temperature: ${CONFIG.temperature}</small>
-        </div>
-        <div style="line-height: 1.8; color: var(--text-color);">${generatedText}</div>
-        `;
-    } catch (error) {
-        outputElement.innerHTML = `<em style="color: var(--google-red);">⚠ Error generating text: ${error.message}</em>`;
+      const { CreateTrainingJobCommand } = aws;
+      const cmd = new CreateTrainingJobCommand(createTrainingJobParams);
+      const res = await sagemakerClient.send(cmd);
+      AwsMetrics.appendMetric({ type:'status', state:'STARTING', message:`Started job ${jobName}`, timestamp:new Date().toISOString() });
+      logDev('SageMaker createTrainingJob response', res);
+      return { trainingJobName: jobName, awsResponse: res };
+    } catch (err) {
+      console.error('CreateTrainingJob error', err);
+      AwsMetrics.appendMetric({ type:'status', state:'FAILED', message: err.message || String(err), timestamp:new Date().toISOString() });
+      throw err;
     }
-};
+  }
 
-// Placeholder for secure cloud generation (requires external API endpoint)
-async function mockCloudGenerate(prompt) {
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call latency
-    return `[Cloud Transformer-Encoder generated text for prompt: "${prompt}" - Requires a secure, deployed API Gateway/SageMaker endpoint for inference.]`;
+  async function describeTrainingJob(trainingJobName) {
+    const aws = await ensureClients();
+    const { DescribeTrainingJobCommand } = aws;
+    try {
+      const cmd = new DescribeTrainingJobCommand({ TrainingJobName: trainingJobName });
+      const res = await sagemakerClient.send(cmd);
+      return res;
+    } catch (err) {
+      console.error('DescribeTrainingJob error', err);
+      throw err;
+    }
+  }
+
+  async function uploadCheckpoint(blob, key) {
+    const aws = await ensureClients();
+    const { PutObjectCommand } = aws;
+    const params = { Bucket: AwsRuntimeConfig.bucket || S3_BUCKET_PLACEHOLDER, Key: key, Body: blob };
+    try {
+      const cmd = new PutObjectCommand(params);
+      const res = await s3Client.send(cmd);
+      return res;
+    } catch (err) {
+      console.error('S3 PutObject error', err);
+      throw err;
+    }
+  }
+
+  return { ensureClients, startSageMakerTraining, describeTrainingJob, uploadCheckpoint };
+})();
+
+/* ======================
+   Transformer encoder (multi-head attention) in TF.js
+   Functional implementation focused on inference & small training loops in browser.
+   This is a compact but correct Transformer encoder: token embedding, positional encoding,
+   multi-head self-attention, feed-forward, layernorm, and stacking.
+   ====================== */
+function createPositionalEncoding(maxLen, dModel) {
+  // returns a Tensor of shape [1, maxLen, dModel]
+  const pe = tf.tidy(() => {
+    const pos = tf.range(0, maxLen, 1, 'float32').expandDims(1); // [maxLen,1]
+    const i = tf.range(0, dModel, 1, 'float32').expandDims(0); // [1,dModel]
+    const angleRates = tf.div(tf.pow(10000, tf.div(tf.floorDiv(i, 2).toFloat(), dModel)), 1.0);
+    // compute pos / (10000^(2i/dModel))
+    const angle = tf.div(pos.toFloat(), angleRates);
+    const sines = tf.sin(angle.slice([0,0],[maxLen, Math.floor(dModel/2)]));
+    const cosines = tf.cos(angle.slice([0, Math.floor(dModel/2)],[maxLen, Math.ceil(dModel/2)]));
+    const interleave = tf.concat([sines, cosines], 1);
+    const peFinal = interleave.reshape([1, maxLen, dModel]);
+    return peFinal;
+  });
+  return pe;
 }
 
-// --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
-    initializeChart();
-    
-    // Inject configuration into the UI
-    document.getElementById('modeDisplay').textContent = CONFIG.USE_CLOUD_TRAINING ? 'Cloud Transformer (AWS)' : 'Local LSTM (tf.js)';
-    document.getElementById('cloudConfigDisplay').innerHTML = `
-        AWS Region: <code>${CONFIG.AWS_REGION}</code><br>
-        S3 Bucket: <code>${CONFIG.AWS_S3_BUCKET}</code><br>
-        WS Endpoint: <code>${CONFIG.AWS_METRICS_WEBSOCKET_ENDPOINT}</code><br>
-        Job Type: <code>${CONFIG.CLOUD_TRAINING_INSTANCE_TYPE}</code>
-    `;
-    
-    // Show cloud-specific options if enabled
-    if (CONFIG.USE_CLOUD_TRAINING) {
-        document.getElementById('cloudOptions').style.display = 'block';
+/* Multi-head attention layer implemented with basic dense layers */
+class MultiHeadSelfAttention {
+  constructor(dModel, numHeads) {
+    if (dModel % numHeads !== 0) throw new Error('dModel must be divisible by numHeads');
+    this.dModel = dModel;
+    this.numHeads = numHeads;
+    this.depth = dModel / numHeads;
+    // weights (dense layers) will be created lazily inside build()
+    this.built = false;
+  }
+
+  build(inputShape) {
+    // inputShape: [batch, seqLen, dModel]
+    const wInit = tf.initializers.glorotUniform({});
+    this.wq = tf.variable(wInit.apply([this.dModel, this.dModel]));
+    this.wk = tf.variable(wInit.apply([this.dModel, this.dModel]));
+    this.wv = tf.variable(wInit.apply([this.dModel, this.dModel]));
+    this.wo = tf.variable(wInit.apply([this.dModel, this.dModel]));
+    this.built = true;
+  }
+
+  splitHeads(x, batchSize) {
+    // x shape: [batch, seqLen, dModel] -> [batch, numHeads, seqLen, depth]
+    return tf.tidy(() => {
+      const reshaped = x.reshape([batchSize, -1, this.numHeads, this.depth]);
+      return reshaped.transpose([0,2,1,3]);
+    });
+  }
+
+  scaledDotProductAttention(q, k, v, mask=null) {
+    // q,k,v: [batch, numHeads, seqLen, depth]
+    return tf.tidy(() => {
+      const matmulQK = tf.matMul(q, k, false, true); // [batch, numHeads, seqLen, seqLen]
+      const dk = tf.scalar(this.depth, 'float32');
+      const scaled = matmulQK.div(tf.sqrt(dk));
+      let logits = scaled;
+      if (mask) {
+        // mask shape broadcastable to logits
+        const bigNeg = tf.scalar(-1e9);
+        logits = logits.add(mask.mul(bigNeg));
+      }
+      const attentionWeights = tf.softmax(logits, -1);
+      const output = tf.matMul(attentionWeights, v); // [batch, numHeads, seqLen, depth]
+      return output;
+    });
+  }
+
+  apply(x, mask=null) {
+    // x: tf.Tensor [batch, seqLen, dModel]
+    return tf.tidy(() => {
+      if (!this.built) this.build(x.shape);
+      const batchSize = x.shape[0];
+      const q = tf.matMul(x, this.wq); // [batch, seqLen, dModel]
+      const k = tf.matMul(x, this.wk);
+      const v = tf.matMul(x, this.wv);
+      const qHeads = this.splitHeads(q, batchSize);
+      const kHeads = this.splitHeads(k, batchSize);
+      const vHeads = this.splitHeads(v, batchSize);
+      const scaledAttn = this.scaledDotProductAttention(qHeads, kHeads, vHeads, mask); // [batch,numHeads,seqLen,depth]
+      const transposed = scaledAttn.transpose([0,2,1,3]); // [batch,seqLen,numHeads,depth]
+      const concat = transposed.reshape([batchSize, -1, this.dModel]); // [batch,seqLen,dModel]
+      const output = tf.matMul(concat, this.wo); // [batch,seqLen,dModel]
+      return output;
+    });
+  }
+
+  // expose variables for optimizer updates
+  getWeights() { return [this.wq, this.wk, this.wv, this.wo]; }
+}
+
+/* Positionwise Feed-Forward Network */
+function pointWiseFeedForwardNetwork(dModel, dff) {
+  const w1 = tf.variable(tf.initializers.glorotUniform({}).apply([dModel, dff]));
+  const b1 = tf.variable(tf.zeros([dff]));
+  const w2 = tf.variable(tf.initializers.glorotUniform({}).apply([dff, dModel]));
+  const b2 = tf.variable(tf.zeros([dModel]));
+  return function(x) {
+    return tf.tidy(()=> {
+      const r1 = tf.relu(tf.add(tf.matMul(x, w1), b1));
+      return tf.add(tf.matMul(r1, w2), b2);
+    });
+  };
+}
+
+/* Layer Normalization (simple implementation) */
+function layerNorm(x, epsilon=1e-6) {
+  return tf.tidy(() => {
+    const mean = tf.mean(x, -1, true);
+    const variance = tf.mean(tf.square(tf.sub(x, mean)), -1, true);
+    const normalized = tf.div(tf.sub(x, mean), tf.sqrt(tf.add(variance, epsilon)));
+    // scale & shift can be applied via learned gamma & beta if desired — using identity for simplicity
+    return normalized;
+  });
+}
+
+/* Transformer Encoder Layer */
+class EncoderLayer {
+  constructor(dModel, numHeads, dff, dropoutRate=0.1) {
+    this.mha = new MultiHeadSelfAttention(dModel, numHeads);
+    this.ffn = pointWiseFeedForwardNetwork(dModel, dff);
+    this.dropoutRate = dropoutRate;
+    // learnable gammas/betas could be added for layernorm; omitted for brevity
+  }
+
+  apply(x, mask=null) {
+    return tf.tidy(() => {
+      // Self-attention
+      const attnOutput = this.mha.apply(x, mask); // [batch, seqLen, dModel]
+      const attnOutDrop = attnOutput; // dropout could be applied (tf.layers.dropout not used)
+      const out1 = layerNorm(tf.add(x, attnOutDrop)); // Residual + norm
+
+      // Feed-forward
+      const ffnOutput = this.ffn(out1);
+      const ffnOutDrop = ffnOutput;
+      const out2 = layerNorm(tf.add(out1, ffnOutDrop));
+      return out2;
+    });
+  }
+
+  getWeights() {
+    return [...this.mha.getWeights() /* plus ffn variables not tracked here */];
+  }
+}
+
+/* Full Transformer Encoder stack */
+class TransformerEncoder {
+  constructor(numLayers, dModel, numHeads, dff, inputVocabSize, maximumPositionEncoding) {
+    this.numLayers = numLayers;
+    this.dModel = dModel;
+    this.numHeads = numHeads;
+    this.dff = dff;
+    this.inputVocabSize = inputVocabSize;
+    this.maximumPositionEncoding = maximumPositionEncoding;
+
+    // Embedding matrix
+    this.embedding = tf.variable(tf.initializers.randomNormal({ mean:0, stddev:0.1 }).apply([inputVocabSize, dModel]));
+    this.posEncoding = createPositionalEncoding(maximumPositionEncoding, dModel); // [1, maxLen, dModel]
+    // Encoder layers
+    this.encLayers = [];
+    for (let i=0;i<numLayers;i++) this.encLayers.push(new EncoderLayer(dModel, numHeads, dff));
+  }
+
+  embed(x) {
+    // x: integer tensor shape [batch, seqLen]
+    return tf.tidy(() => {
+      const embedded = tf.gather(this.embedding, x); // [batch, seqLen, dModel]
+      // scale embeddings by sqrt(dModel)
+      const scaled = embedded.mul(tf.sqrt(tf.scalar(this.dModel)));
+      // add positional encoding (slice to seqLen)
+      const seqLen = x.shape[1];
+      const posSlice = this.posEncoding.slice([0,0,0],[1,seqLen,this.dModel]);
+      return scaled.add(posSlice);
+    });
+  }
+
+  apply(xIds, mask=null) {
+    // xIds: tf.Tensor int32 [batch, seqLen]
+    return tf.tidy(() => {
+      let x = this.embed(xIds);
+      for (let i=0;i<this.numLayers;i++) {
+        x = this.encLayers[i].apply(x, mask);
+      }
+      return x; // [batch, seqLen, dModel]
+    });
+  }
+
+  getEmbeddingWeights() { return [this.embedding]; }
+}
+
+/* ======================
+   Tokenizer & DataHandler (simple word tokenizer preserving public API)
+   ====================== */
+class Tokenizer {
+  constructor() {
+    this.vocab = {};
+    this.idToToken = {};
+    this.tokenCounts = {};
+    this.nextId = 1; // reserve 0 for PAD
+  }
+  cleanText(text) {
+    return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()"]/g,'').replace(/\s{2,}/g,' ').trim();
+  }
+  train(corpus) {
+    const cleaned = this.cleanText(corpus);
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    this.vocab = {}; this.idToToken = {}; this.tokenCounts = {}; this.nextId = 1;
+    words.forEach(w=>{
+      if (!this.vocab[w]) { this.vocab[w] = this.nextId; this.idToToken[this.nextId] = w; this.nextId++; }
+      this.tokenCounts[w] = (this.tokenCounts[w]||0)+1;
+    });
+    this.idToToken[0] = '[PAD]';
+    window.state.vocabSize = Object.keys(this.vocab).length;
+    logDev('Tokenizer trained. Vocab size:', window.state.vocabSize);
+  }
+  encode(text, maxLen=null) {
+    const cleaned = this.cleanText(text);
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    const ids = words.map(w => this.vocab[w] || 0);
+    if (maxLen) {
+      if (ids.length > maxLen) return ids.slice(0,maxLen);
+      while (ids.length < maxLen) ids.push(0);
     }
+    return ids;
+  }
+  decode(ids) {
+    return ids.map(id => this.idToToken[id] || '[UNK]').join(' ');
+  }
+  exportVocabulary() {
+    const blob = new Blob([JSON.stringify(this.idToToken, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'llm_vocab.json'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    alert('Vocabulary exported as llm_vocab.json');
+  }
+}
+
+class DataHandler {
+  constructor(tokenizer) {
+    this.tokenizer = tokenizer;
+    this.corpusText = "";
+    this.tokenIDs = [];
+    this.uploadedFiles = [];
+    this.totalSizeMB = 0;
+    this.transitionMatrix = null;
+    this.setupListeners();
+  }
+  setupListeners() {
+    document.getElementById('file-input').addEventListener('change', (e)=>this.handleFiles(e.target.files));
+    const drop = document.getElementById('drop-zone');
+    ['dragenter','dragover','dragleave','drop'].forEach(ev => {
+      drop.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); });
+    });
+    drop.addEventListener('drop', (e)=> this.handleFiles(e.dataTransfer.files));
+    document.getElementById('text-input').addEventListener('input', (e)=> this.corpusText = e.target.value);
+  }
+  addFileToPreview(f) {
+    const preview = document.getElementById('file-preview');
+    const el = document.createElement('div'); el.style.padding='6px 8px'; el.style.background='#f1f3f4'; el.style.borderRadius='12px';
+    el.innerText = f.name || 'file';
+    preview.appendChild(el);
+    this.uploadedFiles.push(f);
+    this.updateSummary();
+  }
+  updateSummary() {
+    document.getElementById('file-analytics-summary').innerText = `${this.uploadedFiles.length} Files Uploaded (${this.totalSizeMB.toFixed(2)} MB)`;
+  }
+  async handleFiles(files) {
+    if (!files || files.length===0) return;
+    const progressBar = document.getElementById('progress-bar');
+    progressBar.style.width = '0%'; document.getElementById('progress-container').style.display = 'block';
+    this.corpusText=''; this.uploadedFiles=[]; this.totalSizeMB=0; document.getElementById('file-preview').innerHTML='';
+    for (let i=0;i<files.length;i++) {
+      const f = files[i];
+      const reader = new FileReader();
+      await new Promise((resolve)=> {
+        reader.onload = (e)=> { this.corpusText += e.target.result + ' '; this.totalSizeMB += f.size/(1024*1024); this.addFileToPreview(f); resolve(); };
+        reader.readAsText(f);
+      });
+      progressBar.style.width = `${Math.round(((i+1)/files.length)*100)}%`;
+    }
+    document.getElementById('text-input').value = this.corpusText.trim();
+    document.getElementById('progress-container').style.display = 'none';
+    alert(`Loaded ${files.length} files.`);
+  }
+  tokenizeAndBuildMatrix() {
+    const corpus = (document.getElementById('text-input').value || this.corpusText || '').trim();
+    if (!corpus) { alert('Please provide a text corpus first.'); return; }
+    this.tokenizer.train(corpus);
+    this.tokenIDs = this.tokenizer.encode(corpus);
+    this.buildMarkovTransitionMatrix(this.tokenIDs);
+    document.getElementById('metric-vocab-size').innerText = window.state.vocabSize.toLocaleString();
+    document.getElementById('model-controls-panel').style.display = window.state.mode==='TRANSFORMER' ? 'grid' : 'none';
+    document.getElementById('model-dashboard').style.display = window.state.mode==='TRANSFORMER' ? 'grid' : 'none';
+    alert('Tokenization complete.');
+  }
+  buildMarkovTransitionMatrix(ids) {
+    const size = window.state.vocabSize + 1;
+    const matrix = Array(size).fill(0).map(()=>Array(size).fill(0));
+    const rowSums = Array(size).fill(0);
+    for (let i=0;i<ids.length-1;i++){
+      const a = ids[i] < size ? ids[i] : 0;
+      const b = ids[i+1] < size ? ids[i+1] : 0;
+      matrix[a][b]++; rowSums[a]++;
+    }
+    for (let i=0;i<size;i++) if (rowSums[i]>0) for (let j=0;j<size;j++) matrix[i][j] /= rowSums[i];
+    this.transitionMatrix = matrix;
+  }
+}
+
+/* ======================
+   Public instances & state
+   ====================== */
+window.USE_CLOUD_TRAINING = USE_CLOUD_TRAINING_DEFAULT;
+window.state = { mode: 'MARKOV', vocabSize: 0, currentLoss: 'N/A', epochsRun: 0, latency: 'N/A', isTraining: false };
+
+window.tokenizer = new Tokenizer();
+window.dataHandler = new DataHandler(window.tokenizer);
+window.markovChain = new MarkovChain ? new MarkovChain(window.tokenizer, window.dataHandler) : null;
+/* Since MarkovChain defined later, create simple inline fallback if missing */
+if (!window.markovChain) {
+  class MarkovChainLocal { constructor(tokenizer, dataHandler){ this.tokenizer=tokenizer; this.dataHandler=dataHandler; } generate(prompt){ const matrix=this.dataHandler.transitionMatrix; if(!matrix) return 'No matrix'; const words=this.tokenizer.cleanText(prompt).split(/\s+/).filter(Boolean); if(!words.length) return ''; let cur=this.tokenizer.vocab[words[words.length-1]]||0; const out=this.tokenizer.encode(prompt); for(let i=0;i<50;i++){ const probs=matrix[cur]||[]; let r=Math.random(), s=0, next=0; for(let j=0;j<probs.length;j++){ s+=probs[j]; if(r<=s){ next=j; break; } } if(next===0) break; out.push(next); cur=next; } return this.tokenizer.decode(out); } }
+  window.markovChain = new MarkovChainLocal(window.tokenizer, window.dataHandler);
+}
+
+window.tokenizer = window.tokenizer;
+window.dataHandler = window.dataHandler;
+
+/* ======================
+   Full Transformer wrapper for local training & inference
+   ====================== */
+class MiniTransformer {
+  constructor(tokenizer, dataHandler) {
+    this.tokenizer = tokenizer;
+    this.dataHandler = dataHandler;
+    this.encoder = null;
+    this.projectionW = null; // final linear to vocab
+    this.built = false;
+    this.lossHistory = [];
+    this.isTraining = false;
+  }
+
+  buildModel(params) {
+    const vocabSize = window.state.vocabSize + 1;
+    const dModel = params.dModel || 128;
+    const numHeads = params.numHeads || 4;
+    const dff = params.dff || 512;
+    const numLayers = params.numLayers || 2;
+    const maxPos = params.maxPos || 128;
+
+    this.encoder = new TransformerEncoder(numLayers, dModel, numHeads, dff, vocabSize, maxPos);
+    // final projection: dModel -> vocabSize
+    this.projectionW = tf.variable(tf.initializers.glorotUniform({}).apply([dModel, vocabSize]));
+    this.built = true;
+    logDev('Built Transformer encoder with', { numLayers, dModel, numHeads, dff, vocabSize, maxPos });
+  }
+
+  async trainOnText() {
+    if (window.state.isTraining) return;
+    if (!this.dataHandler || this.dataHandler.tokenIDs.length < 20) { alert('Need more corpus to train locally.'); return; }
+    window.state.isTraining = true;
+    document.getElementById('training-status').classList.add('active');
+    initLossChart();
+
+    // Build with UI params if not built
+    const dModel = parseInt(document.getElementById('embedding-size-input').value || '128');
+    const numHeads = parseInt(document.getElementById('num-heads-input').value || '4');
+    const dff = Math.max(256, dModel*2);
+    const numLayers = 2;
+    const maxPos = 128;
+    if (!this.built) this.buildModel({ dModel, numHeads, dff, numLayers, maxPos });
+
+    // Prepare dataset (simple sliding window)
+    const seqLen = Math.min(32, maxPos); // small sequence length for browser
+    const tokens = this.dataHandler.tokenIDs;
+    const xs = []; const ys = [];
+    for (let i=0;i<tokens.length - seqLen;i+=1) {
+      const inSeq = tokens.slice(i, i+seqLen);
+      const outToken = tokens[i+seqLen];
+      xs.push(inSeq);
+      ys.push(outToken);
+      if (xs.length > 2000) break; // limit for browser
+    }
+    if (xs.length === 0) { alert('Not enough sequences for training.'); window.state.isTraining=false; return; }
+
+    // create tensors
+    const xTensor = tf.tensor2d(xs, [xs.length, seqLen], 'int32'); // [N, seqLen]
+    const yTensor = tf.tensor1d(ys, 'int32'); // [N]
+
+    // Training parameters
+    const epochs = parseInt(document.getElementById('epochs-input').value || '6');
+    const batchSize = parseInt(document.getElementById('batch-size-input').value || '8');
+    const learningRate = parseFloat(document.getElementById('learning-rate-input').value || '0.0005');
+    const optimizer = tf.train.adam(learningRate);
+
+    for (let epoch=0; epoch<epochs; epoch++) {
+      if (!window.state.isTraining) break;
+      // simple epoch loop with batches
+      const numBatches = Math.ceil(xs.length / batchSize);
+      let epochLoss = 0;
+      for (let b=0;b<numBatches;b++) {
+        const start = b * batchSize;
+        const end = Math.min((b+1)*batchSize, xs.length);
+        const xb = xTensor.slice([start,0],[end-start, seqLen]);
+        const yb = yTensor.slice([start],[end-start]);
+        const loss = await optimizer.minimize(() => {
+          // forward
+          const encOut = this.encoder.apply(xb); // [batch, seqLen, dModel]
+          // take last token representation for prediction
+          const last = encOut.slice([0, seqLen-1, 0], [end-start, 1, this.encoder.dModel]).reshape([end-start, this.encoder.dModel]);
+          const logits = tf.matMul(last, this.projectionW); // [batch, vocabSize]
+          const yOneHot = tf.oneHot(yb, window.state.vocabSize+1);
+          const ce = tf.losses.softmaxCrossEntropy(yOneHot, logits).mean();
+          return ce;
+        }, true);
+        const lossVal = loss.dataSync()[0];
+        epochLoss += lossVal;
+        // emit metric for chart (step = epoch * batches + b)
+        const step = epoch * numBatches + b + 1;
+        const avgLoss = epochLoss / (b+1);
+        AwsMetrics.appendMetric({ type:'metrics', step, epoch: epoch+1, loss: avgLoss, lr: learningRate, timestamp: new Date().toISOString() });
+        document.getElementById('training-progress-text').innerText = `Epoch ${epoch+1}/${epochs} Batch ${b+1}/${numBatches} - Loss: ${avgLoss.toFixed(4)}`;
+        await tf.nextFrame();
+      }
+      this.lossHistory.push(epochLoss / numBatches);
+      window.state.currentLoss = this.lossHistory[this.lossHistory.length-1];
+      window.state.epochsRun = epoch+1;
+      if (lossChart) { lossChart.data.labels.push(epoch+1); lossChart.data.datasets[0].data.push(window.state.currentLoss); lossChart.update('none'); }
+    }
+
+    xTensor.dispose(); yTensor.dispose();
+    window.state.isTraining = false;
+    document.getElementById('training-status').classList.remove('active');
+    const mem = tf.memory();
+    document.getElementById('metric-memory').innerText = `${(mem.numBytes/1024/1024).toFixed(2)} MB`;
+    alert('Local Transformer training complete.');
+  }
+
+  async generate(prompt) {
+    if (!this.built) return 'No local model built.';
+    const start = performance.now();
+    const seqLen = 32;
+    let inputIds = this.tokenizer.encode(prompt, seqLen);
+    if (inputIds.length < seqLen) {
+      while (inputIds.length < seqLen) inputIds.unshift(0);
+    }
+    const maxTokens = parseInt(document.getElementById('max-tokens-input').value || '50');
+    const temperature = parseFloat(document.getElementById('temperature-input').value || '0.7');
+
+    let generated = [...inputIds];
+    for (let t=0;t<maxTokens;t++) {
+      const inp = tf.tensor2d([generated.slice(-seqLen)], [1, seqLen], 'int32');
+      const encOut = this.encoder.apply(inp); // [1, seqLen, dModel]
+      const last = encOut.slice([0, seqLen-1, 0],[1,1,this.encoder.dModel]).reshape([this.encoder.dModel]);
+      const logits = tf.matMul(last.expandDims(0), this.projectionW).reshape([window.state.vocabSize+1]);
+      const probs = tf.softmax(logits.div(tf.scalar(temperature)));
+      const probsData = await probs.data();
+      // sample
+      let r = Math.random(), accum=0, idx=0;
+      for (let i=0;i<probsData.length;i++){ accum += probsData[i]; if (r <= accum) { idx = i; break; } }
+      if (idx === 0) { // PAD token or eos-like
+        break;
+      }
+      generated.push(idx);
+      inp.dispose(); encOut.dispose(); last.dispose(); logits.dispose(); probs.dispose();
+      await tf.nextFrame();
+    }
+    const end = performance.now();
+    window.state.latency = `${(end - start).toFixed(2)} ms`;
+    document.getElementById('metric-latency').innerText = window.state.latency;
+    return this.tokenizer.decode(generated.slice(-maxTokens));
+  }
+
+  async saveModel() {
+    alert('Saving model: embeddings and projection weights will be downloaded.');
+    // Save embedding and projection as JSON/array buffers
+    // For brevity, save embedding matrix as .json
+    const emb = await this.encoder.getEmbeddingWeights()[0].array();
+    const proj = await this.projectionW.array();
+    const payload = { embedding: emb, projection: proj };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'transformer_model.json'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async loadModel() {
+    alert('Load model not implemented automatically. Use browser TF.js IO handlers or paste weights manually.');
+  }
+}
+
+/* ======================
+   Chart helper
+   ====================== */
+let lossChart = null;
+function initLossChart() {
+  const ctx = document.getElementById('lossChart').getContext('2d');
+  if (lossChart) lossChart.destroy();
+  lossChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Training Loss', data: [], fill: true, tension: 0.3 }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+/* ======================
+   UI wiring & public functions
+   ====================== */
+window.tokenizer = new Tokenizer();
+window.dataHandler = window.dataHandler || new DataHandler(window.tokenizer);
+window.miniTransformer = new MiniTransformer(window.tokenizer, window.dataHandler);
+window.generateTextFromModel = async function() {
+  const prompt = document.getElementById('prompt-input').value || '';
+  const out = document.getElementById('llm-output');
+  out.innerText = 'Generating...';
+  let result = '';
+  if (window.state.mode === 'MARKOV') {
+    result = window.markovChain.generate(prompt);
+  } else {
+    result = await window.miniTransformer.generate(prompt);
+  }
+  out.innerText = result;
+};
+
+/* AWS modal handlers */
+function showAwsConfigModal() { document.getElementById('aws-config-modal').style.display = 'flex'; }
+function closeAwsConfigModal() { document.getElementById('aws-config-modal').style.display = 'none'; }
+
+window.connectAwsFromModal = async function() {
+  const region = document.getElementById('aws-region').value.trim();
+  const accessKeyId = document.getElementById('aws-access-key').value.trim();
+  const secretAccessKey = document.getElementById('aws-secret-key').value.trim();
+  const sessionToken = document.getElementById('aws-session-token').value.trim();
+  const bucket = document.getElementById('aws-bucket').value.trim();
+  const wsUrl = document.getElementById('aws-ws-url').value.trim();
+  const roleArn = document.getElementById('aws-role-arn').value.trim();
+  const imageUri = document.getElementById('aws-image-uri').value.trim();
+  const instanceType = document.getElementById('aws-instance-type').value.trim();
+
+  if (region) AwsRuntimeConfig.region = region;
+  AwsRuntimeConfig.accessKeyId = accessKeyId || null;
+  AwsRuntimeConfig.secretAccessKey = secretAccessKey || null;
+  AwsRuntimeConfig.sessionToken = sessionToken || null;
+  if (bucket) AwsRuntimeConfig.bucket = bucket;
+  if (wsUrl) AwsRuntimeConfig.wsUrl = wsUrl;
+  if (roleArn) AwsRuntimeConfig.roleArn = roleArn;
+  if (imageUri) AwsRuntimeConfig.sagemakerImageUri = imageUri;
+  if (instanceType) AwsRuntimeConfig.instanceType = instanceType;
+
+  closeAwsConfigModal();
+  logDev('AWS runtime config updated (temporary).', AwsRuntimeConfig);
+  document.getElementById('cloud-flag').innerText = String(window.USE_CLOUD_TRAINING);
+  if (AwsRuntimeConfig.wsUrl && !AwsRuntimeConfig.wsUrl.includes('API_GATEWAY_WS_URL')) {
+    AwsMetrics.connect(AwsRuntimeConfig.wsUrl);
+    AwsMetrics.onMetric(processMetricEvent);
+  }
+};
+
+/* Start cloud training (public) */
+window.startCloudTraining = async function() {
+  if (!window.USE_CLOUD_TRAINING) { alert('Cloud training disabled. Toggle USE_CLOUD_TRAINING in Dev Panel.'); return; }
+  if (!window.dataHandler || window.dataHandler.tokenIDs.length < 10) { alert('Tokenize data before starting remote job.'); return; }
+  const runId = `run-${Date.now()}`;
+  const trainConfig = {
+    epochs: parseInt(document.getElementById('epochs-input').value || '6'),
+    batchSize: parseInt(document.getElementById('batch-size-input').value || '8'),
+    learningRate: parseFloat(document.getElementById('learning-rate-input').value || '0.0005'),
+    seqLen: 128,
+    vocabSize: window.state.vocabSize,
+    inputS3Uri: `s3://${AwsRuntimeConfig.bucket}/${AwsRuntimeConfig.projectName}/${runId}/training/`,
+    outputS3Uri: `s3://${AwsRuntimeConfig.bucket}/${AwsRuntimeConfig.projectName}/${runId}/output/`,
+    instanceType: AwsRuntimeConfig.instanceType || DEFAULT_INSTANCE_TYPE_PLACEHOLDER,
+    instanceCount: 1,
+    quantize: false
+  };
+
+  try {
+    // NOTE: For production, pre-upload training data to S3 or provide API to handle upload.
+    const res = await AwsTraining.startSageMakerTraining(runId, trainConfig);
+    alert(`Requested remote training job: ${res.trainingJobName}`);
+    if (AwsRuntimeConfig.wsUrl && !AwsRuntimeConfig.wsUrl.includes('API_GATEWAY_WS_URL')) {
+      AwsMetrics.connect(AwsRuntimeConfig.wsUrl);
+      AwsMetrics.onMetric(processMetricEvent);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Failed to start cloud training: ' + (err.message || String(err)));
+  }
+};
+
+/* Metric event handler */
+function processMetricEvent(event) {
+  if (!event || !event.type) return;
+  if (event.type === 'metrics') {
+    const epoch = event.epoch || event.step || (lossChart?.data?.labels?.length || 0) + 1;
+    const loss = event.loss || 0;
+    window.state.currentLoss = loss;
+    if (lossChart) {
+      lossChart.data.labels.push(epoch);
+      lossChart.data.datasets[0].data.push(loss);
+      lossChart.update('none');
+    }
+    document.getElementById('metric-loss').innerText = (typeof loss === 'number') ? loss.toFixed(4) : loss;
+    document.getElementById('metric-epochs').innerText = String(event.epoch || window.state.epochsRun || '');
+  } else if (event.type === 'status') {
+    const stateMsg = event.state || event.message || '';
+    document.getElementById('training-progress-text').innerText = `${stateMsg} ${event.message || ''}`;
+    if (event.state === 'COMPLETED' || event.state === 'FAILED') {
+      document.getElementById('training-status').classList.remove('active');
+      window.state.isTraining = false;
+    } else if (event.state === 'STARTING' || event.state === 'RUNNING' || event.state === 'CONNECTED') {
+      document.getElementById('training-status').classList.add('active');
+      window.state.isTraining = true;
+    }
+  }
+}
+AwsMetrics.onMetric(processMetricEvent);
+
+/* ======================
+   Test harness and dev helpers
+   ====================== */
+function openTestHarness() { document.getElementById('test-harness-modal').style.display = 'flex'; }
+document.getElementById('close-test').addEventListener('click', ()=>document.getElementById('test-harness-modal').style.display='none');
+
+document.getElementById('run-local-test').addEventListener('click', async ()=>{
+  const log = document.getElementById('test-log');
+  log.textContent = 'Running local Transformer training test...\n';
+  loadSampleData();
+  await new Promise(r=>setTimeout(r,500));
+  dataHandler.tokenizeAndBuildMatrix();
+  document.getElementById('epochs-input').value = '1';
+  await miniTransformer.trainOnText();
+  log.textContent += `Local training finished. Loss: ${window.state.currentLoss}\n`;
 });
 
-// Expose public functions to window (already done via "window.functionName" but for clarity)
-window.startTraining = window.startTraining;
-window.stopTraining = window.stopTraining;
-window.generateText = window.generateText;
+document.getElementById('run-cloud-mock-test').addEventListener('click', async ()=>{
+  const log = document.getElementById('test-log');
+  log.textContent = 'Emitting mocked cloud metrics...\n';
+  const mock = [
+    {type:'status', state:'STARTING', message:'Mock starting', timestamp:new Date().toISOString()},
+    {type:'metrics', step:1, epoch:1, loss:0.98, lr:0.0005, timestamp:new Date().toISOString()},
+    {type:'metrics', step:2, epoch:2, loss:0.6, lr:0.0005, timestamp:new Date().toISOString()},
+    {type:'status', state:'COMPLETED', message:'Mock done', timestamp:new Date().toISOString()}
+  ];
+  mock.forEach((m,i)=> setTimeout(()=> { AwsMetrics.appendMetric(m); log.textContent += `Emitted: ${JSON.stringify(m)}\n`; }, i*600) );
+});
 
---- index.html ---
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIY LLM Toolkit | Static GitHub Pages ML Offload</title>
+/* Dev panel toggles */
+window.toggleCloudMode = function() {
+  window.USE_CLOUD_TRAINING = !window.USE_CLOUD_TRAINING;
+  document.getElementById('cloud-flag').innerText = String(window.USE_CLOUD_TRAINING);
+  document.getElementById('start-cloud-btn').style.display = (window.USE_CLOUD_TRAINING && window.state.mode==='TRANSFORMER') ? 'inline-block' : 'none';
+  logDev('USE_CLOUD_TRAINING now', window.USE_CLOUD_TRAINING);
+};
 
-    <link href="https://fonts.googleapis.com/css?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+function emitMockMetrics() {
+  const now = new Date().toISOString();
+  const m = { type:'metrics', step: Math.floor(Math.random()*100), epoch: Math.floor(Math.random()*10), loss: Math.random(), lr: 0.0005, timestamp: now };
+  AwsMetrics.appendMetric(m);
+  logDev('Emitted mock metric', m);
+}
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
-
-    <style>
-        /* Google Cloud/Material Design Variables from snippet */
-        :root {
-            --primary-blue: #1A73E8;
-            --header-blue: #1A2E44;
-            --nav-panel-color: #F1F3F4;
-            --active-item-color: #E8F0FE;
-            --surface-color: #FFFFFF;
-            --background-color: #F8F9FA;
-            --text-color: #202124;
-            --secondary-text: #5F6368;
-            --google-red: #EA4335;
-            --google-green: #34A853;
-        }
-
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: var(--background-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .container {
-            flex-grow: 1;
-            padding: 30px;
-            max-width: 1200px;
-            margin: auto;
-        }
-
-        header {
-            background-color: var(--header-blue);
-            color: var(--surface-color);
-            padding: 20px 30px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .panel {
-            background-color: var(--surface-color);
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-        }
-
-        textarea, input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            resize: vertical;
-        }
-
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background-color 0.2s;
-            margin-right: 10px;
-        }
-
-        #startTrainingButton {
-            background-color: var(--primary-blue);
-            color: var(--surface-color);
-        }
-
-        #startTrainingButton:hover {
-            background-color: #1660C0;
-        }
-        
-        #startTrainingButton.stop {
-            background-color: var(--google-red);
-        }
-        
-        #startTrainingButton.stop:hover {
-            background-color: #C03328;
-        }
-
-        #generateTextButton {
-            background-color: var(--google-green);
-            color: var(--surface-color);
-        }
-        
-        #generateTextButton:hover {
-            background-color: #2C974B;
-        }
-
-        #trainingStatus {
-            margin-top: 15px;
-            padding: 10px;
-            border-left: 3px solid var(--primary-blue);
-            background-color: var(--nav-panel-color);
-            border-radius: 4px;
-            font-size: 0.9em;
-        }
-        
-        .row {
-            display: flex;
-            gap: 20px;
-        }
-        
-        .col {
-            flex: 1;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>DIY LLM Toolkit <small style="font-weight: 300;">| Hybrid ML Prototype</small></h1>
-            <p><strong>Current Mode:</strong> <span id="modeDisplay">Local LSTM (tf.js)</span></p>
-        </header>
-
-        <div class="row">
-            <div class="col">
-                <div class="panel">
-                    <h2>Training Setup</h2>
-                    <label for="corpusInput">Training Corpus (used for local tf.js mode only):</label>
-                    <textarea id="corpusInput" rows="5">The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The lazy dog slept all day.</textarea>
-                    
-                    <div id="cloudOptions" style="display: none; border-top: 1px solid #eee; padding-top: 15px; margin-top: 15px;">
-                        <h3>Cloud Offload Options (SageMaker)</h3>
-                        <label>
-                            <input type="checkbox" id="quantizeCheckbox"> Enable Quantized Training (via `--quantize` flag)
-                        </label>
-                        <p style="font-size: 0.85em; color: var(--secondary-text);">
-                            <i class="fas fa-info-circle"></i> Remote training uses Transformer encoder on AWS.
-                        </p>
-                    </div>
-
-                    <button id="startTrainingButton" onclick="startTraining()">Start Training</button>
-                    
-                    <div id="trainingStatus">Awaiting start.</div>
-                </div>
-
-                <div class="panel">
-                    <h2>Training Metrics (Loss Chart)</h2>
-                    <div style="height: 300px;">
-                        <canvas id="lossChart"></canvas>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col">
-                <div class="panel">
-                    <h2>Text Generation (Inference)</h2>
-                    <label for="promptInput">Prompt:</label>
-                    <input type="text" id="promptInput" value="The quick brown fox jumps">
-                    <button id="generateTextButton" onclick="generateText()">Generate Text</button>
-                    
-                    <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
-                        <h3>Output</h3>
-                        <div id="output" style="min-height: 150px;">
-                            <em>Output will appear here.</em>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="panel" id="configPanel">
-                    <h2>Configuration & Security</h2>
-                    <p style="font-size: 0.9em; color: var(--secondary-text);">
-                        Current configuration values from <code>config.js</code>:
-                    </p>
-                    <div id="cloudConfigDisplay" style="font-size: 0.8em; line-height: 1.5;">
-                        </div>
-                    <p style="font-size: 0.8em; color: var(--google-red); border: 1px solid #FFEBE6; padding: 10px; border-radius: 4px;">
-                        <i class="fas fa-exclamation-triangle"></i> **SECURITY WARNING:** For cloud training, you must use **temporary credentials** (Cognito, browser STS, or AWS console role assumption) injected into the global <code>AWS.config.credentials</code> object *before* running.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script type="module" src="./main.js"></script>
-</body>
-</html>
-
---- scripts/check_no_aws_keys.sh ---
-#!/bin/bash
-# Description: Scans the codebase for patterns resembling AWS Access Keys and Secret Keys.
-# Fails if any potential keys are found, enforcing security best practices.
-
-# AWS Access Key ID pattern: A five-character prefix followed by 16 alphanumeric characters (A-Z, 0-9). (Total 20)
-ACCESS_KEY_ID_PATTERN="[A-Z0-9]{20}"
-# AWS Secret Access Key pattern: 40 characters (a-z, A-Z, 0-9, /+). (Total 40)
-SECRET_ACCESS_KEY_PATTERN="[a-zA-Z0-9\/+]{40}"
-
-echo "--- Running AWS Key Security Scan ---"
-
-# Use grep to search files recursively, excluding the script itself and common dependency files.
-# The second grep filters out the ALL_CAPS placeholders defined in config.js and awsTraining.js.
-KEY_VIOLATIONS=$(grep -rE "$ACCESS_KEY_ID_PATTERN|$SECRET_ACCESS_KEY_PATTERN" . \
-    --exclude-dir={node_modules,build,dist,.git} \
-    --exclude=check_no_aws_keys.sh \
-    --color=always 2>/dev/null | grep -v "S3_BUCKET_NAME" | grep -v "SAGEMAKER_ROLE_ARN" | grep -v "WSS_API_GATEWAY_ENDPOINT" | grep -v "KMS_KEY_ID_PLACEHOLDER")
-
-if [ -n "$KEY_VIOLATIONS" ]; then
-    echo ""
-    echo "!!! SECURITY VIOLATION !!!"
-    echo "Hardcoded AWS key patterns found in the following locations. These must be removed."
-    echo "--------------------------------------------------------------------------------"
-    echo "$KEY_VIOLATIONS"
-    echo "--------------------------------------------------------------------------------"
-    exit 1
-else
-    echo "✅ Success: No hardcoded AWS key patterns found."
-    exit 0
+/* Download helper for check_no_aws_keys.sh */
+function downloadCheckNoAwsKeys() {
+  const content = `#!/usr/bin/env bash
+set -euo pipefail
+echo "Scanning for AWS key-like patterns..."
+if grep -IEnr --perl-regexp 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}' . || true; then
+  echo "Potential AWS Access Key IDs found. Aborting."
+  exit 1
 fi
+if grep -IEnr --perl-regexp '(?i)aws_secret_access_key' . || true; then
+  echo "Potential AWS secret key literal found. Aborting."
+  exit 1
+fi
+echo "No obvious AWS key patterns found."
+exit 0
+`;
+  const blob = new Blob([content], { type: 'text/x-sh' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'check_no_aws_keys.sh'; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 
---- test/tests.html ---
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Browser Integration Tests</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .test-result { margin: 5px 0; padding: 5px; border-radius: 4px; }
-        .pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-    </style>
-</head>
-<body>
-    <h1>Integration Test Harness</h1>
-    <p>Tests module logic using mock SDK and WebSocket APIs. Open console for details.</p>
-    <div id="results"></div>
-    <script type="module">
-        import CONFIG from '../config.js';
-        import { TFJSLSMTModel } from '../tfjsLSTM.js';
-        import { startCloudTraining, getTrainingJobStatus } from '../awsTraining.js';
-        import { AWSMetricsStream } from '../awsMetrics.js';
+/* Sample data loader */
+function loadSampleData() {
+  const sample = `In the beginning was the word. The quick brown fox jumped over the lazy dog. This is a small sample corpus used for in-browser transformer training experiments. TensorFlow.js allows training lightweight models directly in your browser.`;
+  document.getElementById('text-input').value = sample;
+  document.getElementById('file-preview').innerHTML = '';
+  document.getElementById('file-analytics-summary').innerText = 'Sample dataset loaded';
+  window.dataHandler.corpusText = sample;
+}
 
-        const resultsDiv = document.getElementById('results');
-        
-        // Mock global dependencies needed by main.js
-        window.Chart = {
-            // Mock Chart.js constructor
-            get: () => ({ update: () => {} }),
-            // Mock global chart object for main.js
-            Chart: function() { return { data: { labels: [], datasets: [{ data: [] }] }, update: () => {} }; }
-        };
-        
-        // Mock the required DOM elements for main.js functions/initialization
-        document.body.innerHTML += `
-            <canvas id="lossChart"></canvas>
-            <div id="trainingStatus"></div>
-            <button id="startTrainingButton"></button>
-            <input id="corpusInput" value="test data">
-            <input id="promptInput" value="test prompt">
-            <div id="output"></div>
-            <label><input type="checkbox" id="quantizeCheckbox"></label>
-            <span id="modeDisplay"></span>
-            <div id="cloudConfigDisplay"></div>
-            <div id="cloudOptions"></div>
-        `;
-        document.getElementById('lossChart').getContext = () => ({});
-        
-        function logResult(testName, passed, details = '') {
-            const div = document.createElement('div');
-            div.className = passed ? 'test-result pass' : 'test-result fail';
-            div.innerHTML = `<strong>${passed ? 'PASS' : 'FAIL'}:</strong> ${testName} ${details ? `(${details})` : ''}`;
-            resultsDiv.appendChild(div);
-            if (!passed) console.error(`TEST FAILED: ${testName}`, details);
-        }
+/* ======================
+   Initialization
+   ====================== */
+(function init() {
+  document.getElementById('max-tokens-input').addEventListener('input', (e)=>CONFIG.maxTokens = parseInt(e.target.value || '50'));
+  document.getElementById('temperature-input').addEventListener('input', (e)=>CONFIG.temperature = parseFloat(e.target.value || '0.7'));
+  document.getElementById('embedding-size-input').addEventListener('input', (e)=>CONFIG.embeddingDim = parseInt(e.target.value || '128'));
+  document.getElementById('num-heads-input').addEventListener('input', (e)=>{}); // bound element present
+  document.getElementById('epochs-input').addEventListener('input', (e)=>{ CONFIG.train.epochs = parseInt(e.target.value || '6'); });
+  document.getElementById('batch-size-input').addEventListener('input', (e)=>{ CONFIG.train.batchSize = parseInt(e.target.value || '8'); });
+  document.getElementById('learning-rate-input').addEventListener('input', (e)=>{ CONFIG.train.learningRate = parseFloat(e.target.value || '0.0005'); });
 
-        async function runTests() {
-            // --- Test 1: Local Training Functionality ---
-            CONFIG.USE_CLOUD_TRAINING = false;
-            let localMetricsCount = 0;
-            const mockUpdate = (data) => {
-                if (data.type === 'metrics') localMetricsCount++;
-            };
-            const localTrainer = new TFJSLSMTModel(mockUpdate);
-            await localTrainer.train("a simple corpus");
-            // Wait for mock training to run and complete
-            await new Promise(resolve => setTimeout(resolve, 1500)); 
-            localTrainer.stopTraining();
-            logResult('Local tf.js LSTM Training emits metrics', localMetricsCount > 5, `Emitted ${localMetricsCount} metrics`);
-            
-            // --- Test 2: Local Generation Placeholder ---
-            const genText = await localTrainer.generate("test");
-            logResult('Local tf.js LSTM Generation (Placeholder)', genText.includes("Placeholder from local LSTM"), genText);
+  document.getElementById('model-mode-toggle').checked = (window.state.mode === 'TRANSFORMER');
+  document.getElementById('cloud-flag').innerText = String(window.USE_CLOUD_TRAINING);
+  initLossChart();
 
-            // --- Test 3: Cloud Training Mock SDK Call Setup ---
-            // Setup required mocks for the global AWS SDK
-            window.AWS = {
-                config: { update: () => {} , credentials: { accessKeyId: 'MOCK_KEY' } }, // Mock credentials for security check bypass
-                SageMaker: function() { 
-                    return { 
-                        createTrainingJob: (params) => ({ 
-                            promise: () => {
-                                // Asserting required paths/flags are passed to SageMaker
-                                const checkpointPathCheck = params.CheckpointConfig.S3Uri.includes(CONFIG.AWS_S3_BUCKET) && params.CheckpointConfig.S3Uri.includes('checkpoints');
-                                const quantizeCheck = params.HyperParameters.quantize === 'true';
-                                logResult('SageMaker Job params (Quantize/Checkpoint)', checkpointPathCheck && quantizeCheck, `JobName: ${params.TrainingJobName}`);
-                                return Promise.resolve({ TrainingJobArn: `arn:aws:sm:123:training-job:${params.TrainingJobName}` }); 
-                            }
-                        }),
-                        describeTrainingJob: (params) => ({
-                             promise: () => Promise.resolve({
-                                TrainingJobStatus: 'InProgress', SecondaryStatus: 'Training', TrainingJobName: params.TrainingJobName
-                            })
-                         }),
-                    }
-                },
-            };
-            
-            CONFIG.USE_CLOUD_TRAINING = true;
-            try {
-                const jobName = await startCloudTraining({ quantize: true });
-                logResult('AWS SageMaker Job start triggers correct SDK call', jobName.startsWith("llm-toolkit-transformer-sm-"), `Job Name: ${jobName}`);
-                
-                const status = await getTrainingJobStatus(jobName);
-                logResult('AWS SageMaker Status check returns InProgress', status.state === 'InProgress', `Status: ${status.state}`);
-            } catch (error) {
-                logResult('AWS SageMaker Job start triggers correct SDK call', false, `Error: ${error.message}`);
-            }
+  // Expose useful objects to window for debugging
+  window.AwsTraining = AwsTraining;
+  window.AwsMetrics = AwsMetrics;
+  window.AwsRuntimeConfig = AwsRuntimeConfig;
+  window.downloadCheckNoAwsKeys = downloadCheckNoAwsKeys;
 
-            // --- Test 4: AWS Metrics Stream (Mock Connection) ---
-            let wsConnectionUrl = '';
-            let metricsCheck = 0;
-            let wsLifecycleCheck = 0;
-            
-            const mockWs = {
-                onopen: null, onmessage: null, onerror: null, onclose: null,
-                send: () => {},
-                close: () => { 
-                    if (mockWs.onclose) mockWs.onclose();
-                }
-            };
-            
-            window.WebSocket = function(url) {
-                wsConnectionUrl = url;
-                setTimeout(() => {
-                    if (mockWs.onopen) mockWs.onopen();
-                    wsLifecycleCheck++;
-                    // Simulate receiving a metric (step, loss, type: metrics)
-                    if (mockWs.onmessage) mockWs.onmessage({ data: JSON.stringify({ type: 'metrics', step: 1, epoch: 1, loss: 0.5, lr: 0.001, timestamp: new Date().toISOString() }) });
-                    // Simulate receiving final status (type: status)
-                    if (mockWs.onmessage) mockWs.onmessage({ data: JSON.stringify({ type: 'status', state: 'COMPLETED', message: 'Done', timestamp: new Date().toISOString() }) });
-                }, 10);
-                return mockWs;
-            };
+  // Hook metrics bus
+  AwsMetrics.onMetric(processMetricEvent);
 
-            const metricsStreamTest = new AWSMetricsStream(
-                (data) => { if (data.type === 'metrics') metricsCheck++; }, 
-                (data) => { 
-                    if (data.state === 'COMPLETED') {
-                        wsLifecycleCheck++;
-                    }
-                }
-            );
-            metricsStreamTest.connect('test-run-id');
-            
-            // Wait for mock stream lifecycle to complete
-            await new Promise(resolve => setTimeout(resolve, 50)); 
-            
-            logResult('AWS Metrics Stream URL Parameter Check', wsConnectionUrl.includes(CONFIG.AWS_METRICS_WEBSOCKET_ENDPOINT) && wsConnectionUrl.includes("runId=test-run-id"), `URL: ${wsConnectionUrl}`);
-            logResult('AWS Metrics Stream Data Check', metricsCheck === 1 && wsLifecycleCheck === 2, `Received ${metricsCheck} metrics, Lifecycle steps: ${wsLifecycleCheck}`);
-            
-            // Restore original CONFIG
-            CONFIG.USE_CLOUD_TRAINING = false;
-        }
+  logDev('App initialized.');
+})();
 
-        runTests();
-    </script>
+/* Minimal CONFIG (keeps original public fields) */
+window.CONFIG = {
+  modelMode: 'MARKOV',
+  maxTokens: 50,
+  temperature: 0.7,
+  embeddingDim: 128,
+  ffnDim: 256,
+  train: { epochs: 6, batchSize: 8, learningRate: 0.0005 }
+};
+
+  </script>
 </body>
 </html>
-
---- README.md ---
-# DIY LLM Toolkit (GitHub Pages ML Offload)
-
-This repository hosts a complete, client-heavy, **static web application** designed for **GitHub Pages** deployment.
-
-It implements a hybrid machine learning training architecture:
-1.  **Local Mode (`config.js: USE_CLOUD_TRAINING: false`):** Trains a small **LSTM model using TensorFlow.js** entirely in the browser.
-2.  **Cloud Offload Mode (`config.js: USE_CLOUD_TRAINING: true`):** Connects securely to **AWS SageMaker** via the browser-compatible AWS SDK to orchestrate and monitor heavy **Transformer Encoder** training jobs.
-
-All AWS interactions are client-initiated; **no backend services are hosted in this repo.**
-
-## 🚀 Quick Start
-
-1.  **Local Run:** Serve the repository root using any static web server (e.g., `npx http-server .` or Python's `http.server`).
-2.  **GitHub Pages:** Commit and push to GitHub. Ensure the Pages source is set to the repository root.
-3.  **Run Tests:** Open `test/tests.html` in your browser to verify module integrity.
-4.  **Security Check:** Run `./scripts/check_no_aws_keys.sh` to confirm no hardcoded credentials are present.
-
-## ⚙️ Configuration & AWS Setup
-
-To enable cloud offloading, edit the **`config.js`** file with your AWS details (using **ALL CAPS** placeholders):
-
-### 1. Configure `config.js`
-
-Update the following placeholders in `config.js`:
-* `USE_CLOUD_TRAINING`: Set to `true`.
-* `AWS_REGION`: Your region (e.g., `us-east-1`).
-* `AWS_S3_BUCKET`: Your S3 bucket name.
-* `AWS_SAGEMAKER_ROLE_ARN`: The IAM role SageMaker will assume.
-* `AWS_METRICS_WEBSOCKET_ENDPOINT`: Your API Gateway WebSocket URL.
-
-### 2. Security and Credentials (CRITICAL)
-
-**DO NOT hardcode AWS credentials** in any files.
-
-For cloud training to work, you must use a secure browser flow (e.g., AWS Cognito Identity Pools or Temporary STS credentials from a backend service) to obtain short-lived credentials and inject them into the global SDK object *before* clicking "Start Training":
-
-```javascript
-// Example of required browser injection using temporary credentials
-AWS.config.credentials = new AWS.TemporaryCredentials({
-    RoleArn: 'arn:aws:iam::123456789012:role/CognitoAuthRole',
-    // ... other parameters like WebIdentityToken
-});
-
-
-
