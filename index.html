@@ -1,19 +1,19 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIY LLM Toolkit | Modular Prototype</title>
-    <!-- Inter Font (Google Font Equivalent in previous snippet was Roboto) -->
-    <link href="https://fonts.googleapis.com/css?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- TensorFlow.js for the Mini-Transformer -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
     
     <style>
-        /* Google Cloud/Material Design Variables */
+        /* --- Google Cloud/Material Design Variables --- */
         :root {
             --primary-blue: #1A73E8;
             --header-blue: #1A2E44;
@@ -24,962 +24,1452 @@
             --text-color: #202124;
             --secondary-text: #5F6368;
             --border-color: #DADCE0;
-            --google-red: #D93025;
-            --google-green: #34A853;
-            --google-yellow: #F9AB00;
-            --shadow-smooth: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --google-red: #DB4437;
+            --google-green: #0F9D58;
+            --elevation-low: 0 1px 2px 0 rgba(0,0,0,0.1), 0 1px 3px 0 rgba(0,0,0,0.06);
+            --elevation-mid: 0 2px 4px 0 rgba(0,0,0,0.1), 0 2px 5px 0 rgba(0,0,0,0.08);
         }
-
+        /* --- Base Layout --- */
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Roboto', sans-serif;
             background-color: var(--background-color);
             color: var(--text-color);
             margin: 0;
             padding: 0;
             display: flex;
-            height: 100vh;
-            overflow: hidden;
+            flex-direction: column;
+            min-height: 100vh;
         }
-
-        /* Utility Classes */
-        .card {
+        .top-header {
+            background-color: var(--header-blue);
+            color: var(--surface-color);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: var(--elevation-low);
+            z-index: 10;
+        }
+        .top-header h1 { font-size: 1.5em; font-weight: 400; margin: 0 30px 0 10px; white-space: nowrap; }
+        .top-header h1 i { color: #4285F4; margin-right: 8px; }
+        .main-content-area { display: flex; flex-grow: 1; }
+        .side-nav {
+            width: 250px;
+            background-color: var(--surface-color);
+            border-right: 1px solid var(--border-color);
+            padding: 15px 0;
+            flex-shrink: 0;
+        }
+        .nav-item { padding: 10px 20px; color: var(--secondary-text); font-size: 0.95em; cursor: pointer; transition: background-color 0.2s; }
+        .nav-item.active { background-color: var(--active-item-color); color: var(--primary-blue); border-left: 3px solid var(--primary-blue); font-weight: 500; padding-left: 17px; }
+        .nav-item i { margin-right: 12px; font-size: 1.1em; width: 20px; text-align: center; }
+        .content-wrapper { flex-grow: 1; padding: 30px; max-width: 1000px; }
+        h2 { color: var(--text-color); font-weight: 500; font-size: 1.6em; margin-top: 0; margin-bottom: 20px; }
+        .divider { margin: 30px 0; border: none; border-top: 1px solid var(--border-color); }
+        
+        /* Model Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 15px;
             background-color: var(--surface-color);
             border-radius: 8px;
-            box-shadow: var(--shadow-smooth);
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
+            box-shadow: var(--elevation-low);
+            border-left: 4px solid var(--primary-blue);
         }
-
-        .button-primary {
-            background-color: var(--primary-blue);
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            font-weight: 500;
-        }
-
-        .button-primary:hover {
-            background-color: #1669D9;
-        }
+        .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--google-green); }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .mode-label { font-weight: 500; margin-right: 15px; color: var(--primary-blue); }
+        .mode-label span { color: var(--secondary-text); font-weight: 400; font-size: 0.9em;}
         
-        .button-secondary {
-            background-color: var(--nav-panel-color);
-            color: var(--text-color);
-            padding: 10px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            font-weight: 500;
+        /* Model Controls Panel */
+        #model-controls-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            box-shadow: var(--elevation-low);
+            margin-bottom: 20px;
         }
-
-        .button-secondary:hover {
-            background-color: #E6E9EB;
-        }
-
-        input[type="text"], textarea {
+        .control-group label { display: block; font-size: 0.85em; color: var(--secondary-text); margin-bottom: 5px; }
+        .control-group input[type="number"], .control-group select {
             width: 100%;
-            padding: 10px;
-            margin-top: 5px;
+            padding: 8px;
             border: 1px solid var(--border-color);
             border-radius: 4px;
             box-sizing: border-box;
-            font-family: inherit;
+            font-size: 0.9em;
+            color: var(--text-color);
         }
-
-        /* Layout Structure */
-        .sidebar {
-            width: 250px;
-            background-color: var(--nav-panel-color);
-            padding: 20px 0;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border-color);
-            flex-shrink: 0;
+        
+        /* Dashboard */
+        #model-dashboard {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
         }
-
-        .header {
-            color: var(--header-blue);
-            font-size: 1.4em;
-            font-weight: 700;
-            padding: 0 20px 20px;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 10px;
+        #chart-container {
+            background-color: var(--surface-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: var(--elevation-low);
         }
-
-        .nav-item {
-            display: flex;
-            align-items: center;
-            padding: 12px 20px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            color: var(--secondary-text);
+        #metrics-panel {
+            background-color: var(--surface-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: var(--elevation-low);
+            border-left: 4px solid var(--google-green);
+        }
+        #metrics-panel h3 { margin-top: 0; color: var(--google-green); font-weight: 500; font-size: 1.2em; }
+        .metric-item { margin-bottom: 10px; font-size: 0.95em; }
+        .metric-item strong { display: block; font-size: 1.1em; color: var(--text-color); }
+        
+        /* Data Analytics Dashboard */
+        #data-analytics-dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .dashboard-card {
+            background-color: var(--surface-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: var(--elevation-low);
+        }
+        .dashboard-card h3 { 
+            margin-top: 0; 
+            font-size: 1.2em; 
+            color: var(--primary-blue);
+        }
+        /* Heatmap styles */
+        #transition-heatmap-content {
+            overflow-x: auto;
+            max-height: 350px;
+        }
+        #transition-heatmap-content table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75em;
+            table-layout: fixed;
+        }
+        #transition-heatmap-content th, #transition-heatmap-content td {
+            border: 1px solid #eee;
+            padding: 5px;
+            text-align: center;
+            transition: background-color 0.3s;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            height: 30px;
+        }
+        #transition-heatmap-content th {
+            background-color: #f7f7f7;
             font-weight: 500;
         }
-
-        .nav-item i {
-            margin-right: 12px;
-            width: 20px;
-            text-align: center;
+        .heatmap-cell {
+            cursor: default;
+            color: white;
+            font-weight: 500;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
         }
-
-        .nav-item:hover:not(.active) {
-            background-color: #EAECEF;
-        }
-
-        .nav-item.active {
-            background-color: var(--active-item-color);
-            color: var(--primary-blue);
-            border-left: 3px solid var(--primary-blue);
-            padding-left: 17px; /* Adjust padding for border */
-        }
-
-        .main-content-container {
-            flex-grow: 1;
-            padding: 30px;
-            overflow-y: auto;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            body {
-                flex-direction: column;
-                height: auto;
-                overflow-y: auto;
-            }
-            .sidebar {
-                width: 100%;
-                height: auto;
-                padding: 10px 0;
-                border-right: none;
-                border-bottom: 1px solid var(--border-color);
-            }
-            .header {
-                padding: 10px 20px;
-                font-size: 1.2em;
-            }
-            .nav-item {
-                padding: 10px 20px;
-            }
-            .main-content-container {
-                padding: 15px;
-            }
-        }
+        
+        /* Component Styles */
+        .data-source-card, #matrix-output { background-color: var(--surface-color); border-radius: 8px; box-shadow: var(--elevation-low); padding: 20px; transition: box-shadow 0.3s; }
+        .data-source-tabs { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .data-source-card { flex: 1 1 300px; text-align: center; cursor: pointer; }
+        .data-source-card:hover { box-shadow: var(--elevation-mid); }
+        button { background-color: var(--primary-blue); color: var(--surface-color); border: none; padding: 10px 20px; font-size: 14px; font-weight: 500; text-transform: capitalize; cursor: pointer; border-radius: 4px; transition: background-color 0.3s, box-shadow 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        button:hover { background-color: #3B7DD1; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        textarea { border: 1px solid var(--border-color); border-radius: 4px; padding: 12px; height: 120px; margin-bottom: 20px; width: 100%; box-sizing: border-box; font-family: 'Roboto', sans-serif; font-size: 1em; color: var(--text-color); background-color: var(--surface-color); }
+        .upload-container { border: 2px dashed var(--border-color); background-color: var(--surface-color); border-radius: 8px; padding: 30px; text-align: center; margin-top: 20px; transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s; cursor: pointer; position: relative; }
+        .upload-container:hover { border-color: var(--primary-blue); background-color: #F8F9FA; box-shadow: var(--elevation-low); }
+        .upload-container.drag-over { background-color: #E8F0FE; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(26,115,232,0.2); }
+        .upload-container i.fa-file-import { font-size: 3em; color: var(--primary-blue); margin-bottom: 15px; display: block; }
+        #file-analytics-card { margin-top: 20px; background-color: var(--surface-color); border-radius: 8px; box-shadow: var(--elevation-low); padding: 20px; border-left: 4px solid var(--google-green); }
+        .progress-bar-container { width: 100%; background-color: #eee; border-radius: 4px; margin-top: 15px; overflow: hidden; display: none; align-items: center; height: 35px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); position: relative; }
+        #llm-output { padding: 20px; border: 1px solid var(--border-color); background-color: #F1F3F4; margin-top: 20px; color: var(--text-color); line-height: 1.6; border-radius: 8px; min-height: 100px; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary-blue) 0%, #4285F4 100%); width: 0%; text-align: center; line-height: 35px; color: white; font-size: 12px; font-weight: 500; transition: width 0.3s ease-out; border-radius: 4px 0 0 4px; white-space: nowrap; overflow: hidden; padding: 0 10px; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .progress-bar-container button { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); z-index: 2; background-color: var(--google-red); padding: 5px 10px; font-size: 0.8em; box-shadow: 0 1px 2px rgba(0,0,0,0.2); margin-left: auto; }
+        .training-status { background-color: #E8F0FE; border-left: 4px solid var(--primary-blue); padding: 12px 15px; border-radius: 4px; margin: 15px 0; font-size: 0.9em; display: none; }
+        .training-status.active { display: block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+        .aws-config-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .aws-config-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 500px; width: 90%; }
+        .aws-config-content h3 { margin-top: 0; color: var(--primary-blue); }
+        .aws-config-content input { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; }
+        .aws-config-content label { display: block; font-weight: 500; font-size: 0.9em; color: var(--secondary-text); margin-top: 10px; }
+        #file-preview { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px dashed var(--border-color); }
+        .file-item { background-color: #F1F3F4; border: 1px solid #DADCE0; border-radius: 16px; padding: 6px 12px; font-size: 0.85em; white-space: nowrap; color: var(--secondary-text); display: flex; align-items: center; gap: 6px; transition: background-color 0.2s, box-shadow 0.2s; cursor: default; }
+        .file-item:hover { background-color: #E8F0FE; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .file-item i.fa-file-alt { color: var(--primary-blue); }
+        .file-item .remove-file { color: var(--secondary-text); cursor: pointer; font-size: 0.9em; margin-left: 5px; transition: color 0.2s; }
+        .file-item .remove-file:hover { color: var(--google-red); }
     </style>
 </head>
 <body>
+<div class="top-header">
+    <i class="fas fa-bars" style="margin-right: 20px; font-size: 1.2em;"></i>
+    <h1><i class="fas fa-brain"></i> DIY LLM Toolkit</h1>
+    <div class="top-header-search">
+        <i class="fas fa-search"></i>
+        Search the Knowledge Base...
+    </div>
+    <i class="fas fa-question-circle" style="margin-left: auto; margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
+    <i class="fas fa-bell" style="margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
+    <div style="width: 30px; height: 30px; background-color: #A0C3FF; border-radius: 50%;"></div>
+</div>
+<div class="main-content-area">
+    <div class="side-nav">
+        <div class="nav-item"> <i class="fas fa-home"></i> Overview </div>
+        <div class="nav-item active"> <i class="fas fa-database"></i> Data & Tokenization </div>
+        <div class="nav-item"> <i class="fas fa-chart-line"></i> Analytics & Metrics </div>
+        <div class="nav-item"> <i class="fas fa-cogs"></i> Model Training </div>
+        <div class="nav-item"> <i class="fas fa-robot"></i> Text Generation </div>
+    </div>
+    <div class="content-wrapper">
+        <p style="font-size: 0.95em; margin-bottom: 25px;">A modular prototype for training lightweight LLMs, supporting Markov chain fallback and TensorFlow-based attention simulation.</p>
+        <div class="mode-toggle">
+            <div class="mode-label" id="current-mode-label">
+                Current Mode: <strong id="model-mode-name">Markov Chain (Fallback)</strong>
+                <br><span>(Switch to Transformer for vector-based generation)</span>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="model-mode-toggle" onchange="toggleModelMode(this.checked)">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <section id="data-ingestion-section">
+            <h2>Data Ingestion & Tokenization</h2>
+            
+            <div class="data-source-tabs">
+                <div class="data-source-card">
+                    <h3>Local Files</h3>
+                    <i class="fas fa-upload" style="color: var(--primary-blue); font-size: 2.5em; margin-bottom: 16px;"></i>
+                    <p style="font-size: 0.9em;">Drag, drop, or select multiple local files for instant processing.</p>
+                    <label class="upload-label" for="file-input">Select Local Files</label>
+                </div>
+                <div class="data-source-card" onclick="showAwsConfigModal()">
+                    <h3>AWS S3 Storage</h3>
+                    <i class="fab fa-aws" style="color: #FF9900; font-size: 2.5em; margin-bottom: 16px;"></i>
+                    <p style="font-size: 0.9em; font-weight: 500;">Connect to an AWS S3 bucket to stream training data.</p>
+                    <button style="background-color: #FF9900;" onclick="event.stopPropagation(); showAwsConfigModal();">
+                        <i class="fas fa-link"></i> Connect S3 Bucket
+                    </button>
+                </div>
+                <div class="data-source-card">
+                    <h3>Sample Dataset</h3>
+                    <i class="fas fa-book" style="color: #9334E9; font-size: 2.5em; margin-bottom: 16px;"></i>
+                    <p style="font-size: 0.9em;">Load a sample text corpus for quick testing.</p>
+                    <button onclick="loadSampleData()" style="background-color: #9334E9;">
+                        <i class="fas fa-file-alt"></i> Load Sample Text
+                    </button>
+                </div>
+                <div class="data-source-card">
+                    <h3>Kaggle Dataset</h3>
+                    <i class="fas fa-cloud-download-alt" style="color: var(--google-green); font-size: 2.5em; margin-bottom: 16px;"></i>
+                    <p style="font-size: 0.9em;">Pull data directly from a public Kaggle dataset via API.</p>
+                    <button onclick="showAlert('Integration logic for Kaggle data pull goes here.')" style="background-color: var(--google-green);">
+                        <i class="fas fa-download"></i> Fetch from Kaggle
+                    </button>
+                </div>
+            </div>
+            <div class="upload-container" id="drop-zone">
+                 <i class="fas fa-file-import"></i>
+                 <p>Drop files here or paste below to train the model.</p>
+                 <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
+            </div>
+            <div id="file-analytics-card">
+                <h3>Uploaded Files Overview</h3>
+                <div id="file-analytics-summary">0 Files Uploaded (0.0 MB)</div>
+                <div id="progress-container" class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar">0%</div>
+                    <button onclick="cancelStreaming()"><i class="fas fa-times"></i> Cancel</button>
+                </div>
+                <div id="file-preview"></div>
+                <div style="margin-top: 15px;">
+                    <button onclick="tokenizer.exportVocabulary()" style="background-color: #5F6368;"><i class="fas fa-download"></i> Export Vocab</button>
+                </div>
+            </div>
+            <textarea id="text-input" placeholder="... or paste your text corpus directly here."></textarea>
+            
+            <div style="display: flex; gap: 15px; justify-content: flex-start; margin-bottom: 30px;">
+                <button onclick="dataHandler.tokenizeAndBuildMatrix()"><i class="fas fa-list-ol"></i> Tokenize & Preprocess</button>
+                <button onclick="miniTransformer.trainOnText()" id="train-button" style="background-color: #3C769D;"><i class="fas fa-bolt"></i> Train Model</button>
+            </div>
+            
+            <div class="training-status" id="training-status">
+                <i class="fas fa-spinner fa-spin"></i> Training in progress... <span id="training-progress-text">Epoch 0/0</span>
+            </div>
+            
+        </section>
+        <hr class="divider">
+        <section id="data-analytics-section" style="display: none;">
+            <h2>Data Analytics & Visualization</h2>
+            <p style="font-size: 0.9em; margin-bottom: 25px;">These charts update after running the "Tokenize & Preprocess" step.</p>
+            <div id="data-analytics-dashboard">
+                <div id="token-chart-container" class="dashboard-card">
+                    <h3><i class="fas fa-chart-bar"></i> Top 10 Token Frequency</h3>
+                    <canvas id="tokenChart"></canvas>
+                </div>
+                <div id="heatmap-container" class="dashboard-card">
+                    <h3><i class="fas fa-th-large"></i> Transition/Attention Heatmap</h3>
+                    <div id="transition-heatmap-content">
+                        <em>Run tokenization to view Markov transition probabilities.</em>
+                    </div>
+                </div>
+            </div>
+            <hr class="divider">
+        </section>
+        <section id="model-section">
+            <h2>Model Configuration & Execution</h2>
+            <div id="model-controls-panel">
+                <div class="control-group">
+                    <label for="max-tokens-input">Max Tokens (Inference)</label>
+                    <input type="number" id="max-tokens-input" value="50" min="10">
+                </div>
+                <div class="control-group">
+                    <label for="temperature-input">Temperature (Sampling)</label>
+                    <input type="number" id="temperature-input" value="0.7" step="0.1" min="0.1" max="2.0">
+                </div>
+                <div class="control-group">
+                    <label for="embedding-size-input">Embedding Dim (d_model)</label>
+                    <input type="number" id="embedding-size-input" value="128" min="16">
+                </div>
+                <div class="control-group">
+                    <label for="epochs-input">Epochs (Training)</label>
+                    <input type="number" id="epochs-input" value="20" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="batch-size-input">Batch Size (Training)</label>
+                    <input type="number" id="batch-size-input" value="16" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="learning-rate-input">Learning Rate</label>
+                    <input type="number" id="learning-rate-input" value="0.0005" step="0.0001" min="0.0001">
+                </div>
+            </div>
+            
+            <div id="model-dashboard">
+                <div id="chart-container">
+                    <h3><i class="fas fa-chart-area"></i> Live Loss Curve</h3>
+                    <canvas id="lossChart"></canvas>
+                </div>
+                <div id="metrics-panel">
+                    <h3><i class="fas fa-tachometer-alt"></i> Model Metrics</h3>
+                    <div class="metric-item">Current Loss: <strong id="metric-loss">N/A</strong></div>
+                    <div class="metric-item">Epochs Run: <strong id="metric-epochs">0</strong></div>
+                    <div class="metric-item">Vocab Size: <strong id="metric-vocab-size">0</strong></div>
+                    <div class="metric-item">Inference Latency: <strong id="metric-latency">N/A</strong></div>
+                    <div class="metric-item">Memory Footprint: <strong id="metric-memory">0 MB</strong></div>
+                    <button onclick="miniTransformer.saveModel()" style="margin-top: 15px;"><i class="fas fa-save"></i> Save Model Weights</button>
+                    <button onclick="miniTransformer.loadModel()" style="margin-top: 10px; background-color: #5F6368;"><i class="fas fa-file-upload"></i> Load Model Weights</button>
+                </div>
+            </div>
+        </section>
+        <hr class="divider">
+        <section id="generation-section">
+            <h2>Text Generation</h2>
+            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                <input type="text" id="prompt-input" placeholder="Enter your prompt word or sentence here..." style="flex-grow: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px;">
+                <button onclick="generateTextFromModel()"><i class="fas fa-magic"></i> Generate Text</button>
+            </div>
+            
+            <div id="llm-output">
+                <em>Generated text will appear here. Start by tokenizing and training your model.</em>
+            </div>
+        </section>
+    </div>
+</div>
+<div id="custom-alert" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
+    <div style="background: white; padding: 25px; border-radius: 8px; box-shadow: var(--elevation-mid); max-width: 400px;">
+        <h3 id="alert-title" style="margin-top: 0; color: var(--primary-blue);">Alert</h3>
+        <p id="alert-message"></p>
+        <button onclick="document.getElementById('custom-alert').style.display='none'" style="float: right;">OK</button>
+    </div>
+</div>
 
-    <!-- Sidebar Navigation -->
-    <div class="sidebar">
-        <div class="header">
-            DIY LLM Toolkit
-        </div>
-        <div class="nav-item active" data-tab-id="data-ingestion">
-            <i class="fas fa-database"></i> Data Ingestion
-        </div>
-        <div class="nav-item" data-tab-id="model-training">
-            <i class="fas fa-brain"></i> Model Training
-        </div>
-        <div class="nav-item" data-tab-id="text-generation">
-            <i class="fas fa-keyboard"></i> Text Generation
-        </div>
-        <div class="nav-item" data-tab-id="analysis">
-            <i class="fas fa-chart-line"></i> Analysis
+<!-- AWS S3 Configuration Modal -->
+<div id="aws-config-modal" class="aws-config-modal">
+    <div class="aws-config-content">
+        <h3><i class="fab fa-aws"></i> AWS S3 Configuration</h3>
+        <p style="font-size: 0.9em; color: var(--secondary-text);">Enter your AWS credentials to connect to S3. Your credentials are stored locally and never sent to external servers.</p>
+        
+        <label for="aws-region">AWS Region</label>
+        <input type="text" id="aws-region" placeholder="us-east-1" value="us-east-1">
+        
+        <label for="aws-access-key">Access Key ID</label>
+        <input type="text" id="aws-access-key" placeholder="AKIAIOSFODNN7EXAMPLE">
+        
+        <label for="aws-secret-key">Secret Access Key</label>
+        <input type="password" id="aws-secret-key" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+        
+        <label for="aws-bucket">Bucket Name</label>
+        <input type="text" id="aws-bucket" placeholder="my-training-data-bucket">
+        
+        <label for="aws-prefix">Prefix/Folder (Optional)</label>
+        <input type="text" id="aws-prefix" placeholder="datasets/">
+        
+        <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
+            <button onclick="closeAwsConfigModal()" style="background-color: #5F6368;">Cancel</button>
+            <button onclick="connectAwsS3()" style="background-color: #FF9900;"><i class="fas fa-link"></i> Connect</button>
         </div>
     </div>
+</div>
 
-    <!-- Main Content Area -->
-    <div class="main-content-container" id="main-content">
-        <!-- Content will be rendered here by JavaScript -->
-        <div style="text-align: center; padding-top: 50px;">
-            <i class="fas fa-arrow-left" style="font-size: 2em; color: var(--secondary-text); margin-bottom: 15px;"></i>
-            <h2 style="color: var(--secondary-text);">Select a navigation item to begin.</h2>
-        </div>
-    </div>
-
-    <script>
-        // --- GLOBAL STATE MANAGEMENT ---
-        const state = {
-            activeTab: 'data-ingestion',
-            corpus: "",
-            corpusTokenCount: 0,
-            vocabulary: new Set(),
-            vocabSize: 0,
-            markovModel: null,
-            miniTransformer: null,
-            mode: 'MARKOV', // MARKOV or TRANSFORMER
-            isTraining: false,
-        };
-
-        const CONFIG = {
-            markovOrder: 3,
-            transformerEpochs: 10,
-            transformerBatchSize: 64,
-            transformerModelSize: 128,
-            temperature: 0.7,
-            maxGenerationLength: 500,
-        };
-
-        // --- AUTH/API PLACEHOLDERS ---
-        const apiKey = ""; 
-
-        // --- UTILITY FUNCTIONS ---
-
-        // Simple debounce function
-        const debounce = (func, delay) => {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), delay);
+<script>
+    // Configuration
+    const CONFIG = {
+        modelMode: 'MARKOV',
+        maxTokens: 50, // Reduced for better output
+        temperature: 0.7, // Lower temperature for more focused generation
+        embeddingDim: 128, // Increased for better representation
+        numHeads: 4,
+        ffnDim: 256, // Increased FFN dimension
+        train: {
+            epochs: 20, // More epochs for better learning
+            batchSize: 16, // Smaller batch for better gradients
+            learningRate: 0.0005 // Lower learning rate for stability
+        }
+    };
+    
+    const SEQUENCE_LENGTH = 10;
+    const UNK_TOKEN_ID = 0;
+    let lossChart = null;
+    let tokenChart = null;
+    let currentStreamController = null;
+    
+    // Utility Functions
+    function showAlert(message, title = 'Notification') {
+        document.getElementById('alert-title').textContent = title;
+        document.getElementById('alert-message').innerHTML = message;
+        document.getElementById('custom-alert').style.display = 'flex';
+    }
+    
+    function initializeLossChart() {
+        const ctx = document.getElementById('lossChart').getContext('2d');
+        if (lossChart) lossChart.destroy();
+        lossChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Training Loss',
+                    data: [],
+                    borderColor: 'rgb(26, 115, 232)',
+                    backgroundColor: 'rgba(26, 115, 232, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Loss' } },
+                    x: { title: { display: true, text: 'Epoch' } }
+                }
+            }
+        });
+    }
+    
+    function initializeTokenChart() {
+        const ctx = document.getElementById('tokenChart').getContext('2d');
+        if (tokenChart) tokenChart.destroy();
+        tokenChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Token Count',
+                    data: [],
+                    backgroundColor: 'rgba(15, 157, 88, 0.6)',
+                    borderColor: 'rgb(15, 157, 88)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                indexAxis: 'y',
+                scales: {
+                    x: { beginAtZero: true, title: { display: true, text: 'Frequency' } },
+                    y: { ticks: { autoSkip: false } }
+                }
+            }
+        });
+    }
+    
+    // State Management
+    const state = new Proxy({
+        mode: CONFIG.modelMode,
+        vocabSize: 0,
+        currentLoss: 'N/A',
+        epochsRun: 0,
+        latency: 'N/A',
+        isTraining: false,
+    }, {
+        set(obj, prop, value) {
+            obj[prop] = value;
+            updateUI(prop, value);
+            return true;
+        }
+    });
+    
+    function updateUI(prop, value) {
+        switch (prop) {
+            case 'mode':
+                document.getElementById('model-mode-name').textContent = value === 'MARKOV' ? 'Markov Chain (Fallback)' : 'MiniTransformer (TF.js)';
+                document.getElementById('current-mode-label').style.borderLeftColor = value === 'MARKOV' ? '#ccc' : 'var(--primary-blue)';
+                document.getElementById('llm-output').innerHTML = `<em>Switched to ${value} mode. Re-run generation.</em>`;
+                break;
+            case 'vocabSize':
+                document.getElementById('metric-vocab-size').textContent = value.toLocaleString();
+                break;
+            case 'currentLoss':
+                document.getElementById('metric-loss').textContent = typeof value === 'number' ? value.toFixed(4) : value;
+                break;
+            case 'epochsRun':
+                document.getElementById('metric-epochs').textContent = value.toLocaleString();
+                break;
+            case 'latency':
+                document.getElementById('metric-latency').textContent = value;
+                break;
+            case 'isTraining':
+                const trainButton = document.getElementById('train-button');
+                trainButton.disabled = value;
+                trainButton.innerHTML = value ? '<i class="fas fa-spinner fa-spin"></i> Training...' : '<i class="fas fa-bolt"></i> Train Model';
+                break;
+        }
+    }
+    
+    function toggleModelMode(isChecked) {
+        state.mode = isChecked ? 'TRANSFORMER' : 'MARKOV';
+        const displayStyle = state.mode === 'TRANSFORMER' ? 'grid' : 'none';
+        
+        document.getElementById('model-controls-panel').style.display = displayStyle;
+        document.getElementById('model-dashboard').style.display = displayStyle;
+        
+        if (state.mode === 'TRANSFORMER' && !lossChart) {
+             initializeLossChart();
+        }
+        
+        const trainButton = document.getElementById('train-button');
+        if (state.mode === 'TRANSFORMER') {
+            trainButton.innerHTML = '<i class="fas fa-bolt"></i> Train Model (TF.js)';
+            trainButton.style.backgroundColor = '#3C769D';
+        } else {
+            trainButton.innerHTML = '<i class="fas fa-bolt"></i> Train Model (Markov)';
+            trainButton.style.backgroundColor = '#0F9D58';
+        }
+    }
+    
+    // UI Controls
+    document.getElementById('max-tokens-input').addEventListener('input', (e) => CONFIG.maxTokens = parseInt(e.target.value));
+    document.getElementById('temperature-input').addEventListener('input', (e) => CONFIG.temperature = parseFloat(e.target.value));
+    document.getElementById('embedding-size-input').addEventListener('input', (e) => CONFIG.embeddingDim = parseInt(e.target.value));
+    document.getElementById('epochs-input').addEventListener('input', (e) => CONFIG.train.epochs = parseInt(e.target.value));
+    document.getElementById('batch-size-input').addEventListener('input', (e) => CONFIG.train.batchSize = parseInt(e.target.value));
+    document.getElementById('learning-rate-input').addEventListener('input', (e) => CONFIG.train.learningRate = parseFloat(e.target.value));
+    
+    // Tokenizer
+    class Tokenizer {
+        constructor() {
+            this.vocab = {}; 
+            this.idToToken = {};
+            this.tokenCounts = {}; 
+            this.nextId = 1;
+        }
+        
+        cleanText(text) {
+            return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s{2,}/g, ' ');
+        }
+        
+        train(corpus) {
+            const cleanedCorpus = this.cleanText(corpus);
+            const words = cleanedCorpus.split(/\s+/).filter(w => w.length > 0);
+            
+            this.vocab = {};
+            this.idToToken = {};
+            this.tokenCounts = {};
+            this.nextId = 1;
+            
+            words.forEach(word => {
+                if (!this.vocab[word]) {
+                    this.vocab[word] = this.nextId;
+                    this.idToToken[this.nextId] = word;
+                    this.nextId++;
+                }
+                this.tokenCounts[word] = (this.tokenCounts[word] || 0) + 1;
+            });
+            
+            this.idToToken[UNK_TOKEN_ID] = '[PAD]';
+            state.vocabSize = Object.keys(this.vocab).length;
+            showAlert(`Tokenizer trained. Vocab size: ${state.vocabSize} (plus 1 reserved ID for padding)`, 'Tokenization Complete');
+        }
+        
+        encode(text) {
+            if (state.vocabSize === 0) return [];
+            const cleanedText = this.cleanText(text);
+            const words = cleanedText.split(/\s+/).filter(w => w.length > 0);
+            return words.map(word => this.vocab[word] || UNK_TOKEN_ID);
+        }
+        
+        decode(ids) {
+            return ids.map(id => this.idToToken[id] || '[UNK]').join(' ');
+        }
+        
+        getTopTokenFrequencies(n = 10) {
+            const sortedTokens = Object.entries(this.tokenCounts)
+                .sort(([, countA], [, countB]) => countB - countA)
+                .slice(0, n);
+            
+            return {
+                labels: sortedTokens.map(([token]) => token),
+                data: sortedTokens.map(([, count]) => count)
             };
-        };
-        
-        // --- MARKOV MODEL IMPLEMENTATION ---
-        class MarkovChain {
-            constructor(order = 3) {
-                this.order = order;
-                this.chain = new Map();
-                this.vocab = new Set();
-            }
-
-            // Simple text tokenization (words and punctuation)
-            tokenize(text) {
-                // Split by spaces, keep punctuation as separate tokens if surrounded by space
-                return text.toLowerCase().match(/\S+/g) || [];
-            }
-
-            train(text) {
-                const tokens = this.tokenize(text);
-                if (tokens.length < this.order + 1) return;
-
-                // Build vocabulary
-                tokens.forEach(token => this.vocab.add(token));
-
-                for (let i = 0; i <= tokens.length - this.order; i++) {
-                    const state = tokens.slice(i, i + this.order).join(' ');
-                    const nextToken = tokens[i + this.order];
-
-                    if (!this.chain.has(state)) {
-                        this.chain.set(state, new Map());
-                    }
-
-                    const nextTokens = this.chain.get(state);
-                    nextTokens.set(nextToken, (nextTokens.get(nextToken) || 0) + 1);
-                }
-            }
-
-            // Selects the next token based on weighted probability
-            selectNext(nextTokens) {
-                let totalWeight = 0;
-                for (const count of nextTokens.values()) {
-                    totalWeight += count;
-                }
-
-                let rand = Math.random() * totalWeight;
-
-                for (const [token, count] of nextTokens.entries()) {
-                    if (rand < count) {
-                        return token;
-                    }
-                    rand -= count;
-                }
-                return null; // Fallback
-            }
-
-            generate(startPrompt, maxLength = CONFIG.maxGenerationLength) {
-                if (!this.chain.size) return "Error: Markov model not trained.";
-
-                const promptTokens = this.tokenize(startPrompt);
-                let currentTokens = promptTokens.slice(-this.order);
-                let resultTokens = [...promptTokens];
-
-                for (let i = 0; i < maxLength; i++) {
-                    const currentState = currentTokens.join(' ');
-                    const nextTokens = this.chain.get(currentState);
-
-                    if (!nextTokens) {
-                        // Attempt to gracefully restart if the state is not found
-                        if (this.chain.size > 0) {
-                            const randomState = [...this.chain.keys()][Math.floor(Math.random() * this.chain.size)];
-                            currentTokens = randomState.split(' ');
-                            continue;
-                        } else {
-                            break; // Cannot continue generation
-                        }
-                    }
-
-                    const nextToken = this.selectNext(nextTokens);
-                    if (!nextToken) break;
-
-                    resultTokens.push(nextToken);
-                    currentTokens.shift();
-                    currentTokens.push(nextToken);
-                }
-                
-                // Join tokens back, being careful with punctuation (a simplification)
-                return resultTokens.join(' ').replace(/\s([.,!?:;])/g, '$1');
-            }
         }
 
-        // --- MINI-TRANSFORMER IMPLEMENTATION (TF.js) ---
-        class MiniTransformer {
-            constructor(vocab, vocabSize) {
-                this.vocab = [...vocab];
-                this.vocabSize = vocabSize;
-                this.stoi = new Map(this.vocab.map((token, i) => [token, i]));
-                this.itos = this.vocab;
-                this.model = null;
-                this.inputSequenceLength = CONFIG.markovOrder; // Reusing the Markov order for initial sequence length
-            }
-
-            async buildModel() {
-                if (this.model) {
-                    this.model.dispose(); // Clean up old model if re-training
-                }
-
-                this.model = tf.sequential();
-                
-                // Input Embedding Layer
-                this.model.add(tf.layers.embedding({
-                    inputDim: this.vocabSize,
-                    outputDim: CONFIG.transformerModelSize,
-                    inputLength: this.inputSequenceLength,
-                    name: 'embedding_layer'
-                }));
-
-                // Simple RNN/LSTM for sequential processing (a common proxy for simplified Transformer logic)
-                this.model.add(tf.layers.lstm({
-                    units: CONFIG.transformerModelSize * 2,
-                    returnSequences: false,
-                    name: 'lstm_layer'
-                }));
-
-                // Dense Layer for prediction (maps to vocabulary size)
-                this.model.add(tf.layers.dense({
-                    units: this.vocabSize,
-                    activation: 'softmax',
-                    name: 'output_layer'
-                }));
-
-                // Compile the model
-                this.model.compile({
-                    optimizer: tf.train.adam(),
-                    loss: 'categoricalCrossentropy'
-                });
-
-                document.getElementById('training-status').innerHTML += `<p style="color: var(--google-green);"><i class="fas fa-check-circle"></i> Model Architecture Built.</p>`;
-            }
-
-            preprocess(text) {
-                // Tokenization: Reuse Markov's simple tokenizer
-                const markov = new MarkovChain();
-                const tokens = markov.tokenize(text);
-                
-                // Generate sequences (X) and next tokens (Y)
-                let X = [];
-                let Y = [];
-
-                for (let i = 0; i < tokens.length - this.inputSequenceLength; i++) {
-                    const sequence = tokens.slice(i, i + this.inputSequenceLength);
-                    const nextToken = tokens[i + this.inputSequenceLength];
-
-                    // Convert tokens to indices
-                    const x_indices = sequence.map(token => this.stoi.get(token));
-                    const y_index = this.stoi.get(nextToken);
-
-                    if (x_indices.every(idx => idx !== undefined) && y_index !== undefined) {
-                        X.push(x_indices);
-                        Y.push(y_index);
-                    }
-                }
-                
-                const xs = tf.tensor2d(X, [X.length, this.inputSequenceLength]);
-                const ys = tf.oneHot(tf.tensor1d(Y, 'int32'), this.vocabSize);
-                
-                return { xs, ys };
-            }
-
-            async train(text) {
-                document.getElementById('training-status').innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Preprocessing data...</p>';
-                
-                await this.buildModel();
-                const { xs, ys } = this.preprocess(text);
-
-                if (xs.shape[0] === 0) {
-                    throw new Error("Corpus too small or failed to generate training sequences.");
-                }
-
-                document.getElementById('training-status').innerHTML += `<p style="color: var(--google-green);"><i class="fas fa-check-circle"></i> Data Prepared. Sequences: ${xs.shape[0]}</p>`;
-                document.getElementById('training-status').innerHTML += `<p><i class="fas fa-spinner fa-spin"></i> Starting Training (${CONFIG.transformerEpochs} epochs)...</p>`;
-                
-                const history = await this.model.fit(xs, ys, {
-                    epochs: CONFIG.transformerEpochs,
-                    batchSize: CONFIG.transformerBatchSize,
-                    shuffle: true,
-                    callbacks: {
-                        onEpochEnd: (epoch, logs) => {
-                            document.getElementById('training-status').innerHTML = 
-                                `<p><i class="fas fa-spinner fa-spin"></i> Training Epoch ${epoch + 1}/${CONFIG.transformerEpochs} | Loss: ${logs.loss.toFixed(4)}</p>`;
-                        }
-                    }
-                });
-                
-                xs.dispose();
-                ys.dispose();
-                return history;
-            }
-            
-            async generate(startPrompt, maxLength = CONFIG.maxGenerationLength) {
-                if (!this.model) throw new Error("Mini-Transformer not trained. Please train the model first.");
-
-                const markov = new MarkovChain();
-                let resultTokens = markov.tokenize(startPrompt);
-                let currentTokens = resultTokens.slice(-this.inputSequenceLength);
-
-                if (currentTokens.length < this.inputSequenceLength) {
-                    throw new Error(`Prompt must be at least ${this.inputSequenceLength} tokens long for Transformer generation.`);
-                }
-                
-                // Using tf.tidy for memory management
-                for (let i = 0; i < maxLength; i++) {
-                    const nextToken = tf.tidy(() => {
-                        // 1. Convert current tokens to index tensor
-                        const x_indices = currentTokens.map(token => this.stoi.get(token)).filter(idx => idx !== undefined);
-                        if (x_indices.length !== this.inputSequenceLength) return null; // stop if token not in vocab
-
-                        const inputTensor = tf.tensor2d([x_indices], [1, this.inputSequenceLength]);
-
-                        // 2. Predict probabilities (logits)
-                        const prediction = this.model.predict(inputTensor); // Shape [1, vocabSize]
-                        
-                        // 3. Apply temperature and sample
-                        const logits = tf.squeeze(prediction).div(tf.scalar(CONFIG.temperature));
-                        const probabilities = tf.softmax(logits).arraySync();
-
-                        // 4. Sample the next token index
-                        let sampledIndex = -1;
-                        let r = Math.random();
-                        let cumulativeProbability = 0;
-                        for (let j = 0; j < probabilities.length; j++) {
-                            cumulativeProbability += probabilities[j];
-                            if (r <= cumulativeProbability) {
-                                sampledIndex = j;
-                                break;
-                            }
-                        }
-
-                        if (sampledIndex === -1) return null; // Should not happen
-
-                        return this.itos[sampledIndex];
-                    });
-
-                    if (!nextToken) break;
-
-                    resultTokens.push(nextToken);
-                    currentTokens.shift();
-                    currentTokens.push(nextToken);
-                }
-
-                // Join tokens back
-                return resultTokens.join(' ').replace(/\s([.,!?:;])/g, '$1');
-            }
+        exportVocabulary() {
+            const vocabContent = JSON.stringify(this.idToToken, null, 2);
+            const blob = new Blob([vocabContent], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'llm_vocab.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showAlert('The current vocabulary has been exported as **llm_vocab.json**.', 'Export Successful');
         }
-
-        // --- DATA INGESTION LOGIC ---
-
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const text = e.target.result;
-                    processCorpus(text);
-                };
-                reader.readAsText(file);
-            }
-        }
-
-        function handleTextPaste() {
-            const textarea = document.getElementById('manual-text-input');
-            const text = textarea.value;
-            processCorpus(text);
-        }
-
-        function processCorpus(text) {
-            state.corpus = text;
-            
-            // Re-initialize Markov to get fresh vocabulary
-            const tempMarkov = new MarkovChain();
-            tempMarkov.train(text); 
-            
-            state.vocabulary = tempMarkov.vocab;
-            state.vocabSize = state.vocabulary.size;
-            state.corpusTokenCount = tempMarkov.tokenize(text).length;
-
-            updateIngestionStats();
-            
-            // Automatically switch to training tab after ingestion
-            setActiveTab('model-training');
+    }
+    
+    // Data Handler
+    class DataHandler {
+        constructor(tokenizer) {
+            this.tokenizer = tokenizer;
+            this.corpusText = "";
+            this.tokenIDs = [];
+            this.transitionMatrix = null;
+            this.uploadedFiles = [];
+            this.totalSizeMB = 0;
+            this.setupListeners();
+            initializeTokenChart();
         }
         
-        function updateIngestionStats() {
-            const statsElement = document.getElementById('ingestion-stats');
-            if (statsElement) {
-                statsElement.innerHTML = `
-                    <p><strong>Status:</strong> <span style="color: var(--google-green);">Corpus Loaded!</span></p>
-                    <p><strong>Tokens:</strong> ${state.corpusTokenCount.toLocaleString()}</p>
-                    <p><strong>Vocabulary Size:</strong> ${state.vocabSize.toLocaleString()}</p>
-                    <p><strong>First 200 Chars:</strong> <em>${state.corpus.substring(0, 200).replace(/\n/g, ' ')}...</em></p>
-                    <p style="margin-top: 15px;">You can now proceed to the **Model Training** tab.</p>
-                `;
-            }
+        setupListeners() {
+            document.getElementById('file-input').addEventListener('change', (e) => {
+                this.handleFiles(e.target.files);
+            });
+            
+            document.getElementById('text-input').addEventListener('input', (e) => {
+                this.corpusText = e.target.value;
+            });
+            
+            const dropZone = document.getElementById('drop-zone');
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, this.preventDefaults, false);
+            });
+            dropZone.addEventListener('dragenter', () => dropZone.classList.add('drag-over'), false);
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'), false);
+            dropZone.addEventListener('drop', (e) => {
+                dropZone.classList.remove('drag-over');
+                this.handleFiles(e.dataTransfer.files);
+            }, false);
+        }
+        
+        preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
 
-        // --- MODEL TRAINING LOGIC ---
+        handleFiles(files) {
+            const progressBarContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            
+            if (files.length === 0) return;
+            
+            progressBarContainer.style.display = 'flex';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            this.corpusText = "";
+            this.uploadedFiles = [];
+            this.totalSizeMB = 0;
+            document.getElementById('file-preview').innerHTML = '';
 
-        async function startTraining() {
-            if (!state.corpus) {
-                alert('Please ingest a text corpus first in the Data Ingestion tab.');
+            let filePromises = [];
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileSizeMB = file.size / (1024 * 1024);
+                this.totalSizeMB += fileSizeMB;
+
+                this.addFileToPreview(file);
+
+                filePromises.push(new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.corpusText += e.target.result + " ";
+                        const progress = ((i + 1) / files.length) * 100;
+                        progressBar.style.width = progress.toFixed(0) + '%';
+                        progressBar.textContent = `${progress.toFixed(0)}% - Reading ${file.name}`;
+                        resolve();
+                    };
+                    currentStreamController = () => {
+                        reader.abort();
+                        resolve();
+                    };
+                    reader.readAsText(file);
+                }));
+            }
+
+            Promise.all(filePromises).then(() => {
+                progressBarContainer.style.display = 'none';
+                document.getElementById('text-input').value = this.corpusText.trim();
+                showAlert(`Successfully loaded ${files.length} files (${this.totalSizeMB.toFixed(2)} MB). Ready for tokenization.`, 'File Load Complete');
+                this.updateSummary();
+                currentStreamController = null;
+            }).catch(error => {
+                progressBarContainer.style.display = 'none';
+                showAlert(`Error reading files: ${error.message}`, 'File Read Error');
+                console.error('File read error:', error);
+                currentStreamController = null;
+            });
+        }
+        
+        addFileToPreview(fileInfo) {
+            const preview = document.getElementById('file-preview');
+            const fileItem = document.createElement('div');
+            const sizeString = fileInfo.size ? `${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB` : 'S3';
+
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `<i class="fas fa-file-alt"></i> <span>${fileInfo.name}</span> <span style="font-size: 0.8em;">(${sizeString})</span>`;
+            
+            this.uploadedFiles.push(fileInfo);
+            
+            const removeIcon = document.createElement('i');
+            removeIcon.className = 'fas fa-times remove-file';
+            removeIcon.onclick = () => {
+                 fileItem.remove();
+                 showAlert(`Removed file **${fileInfo.name}**. You must re-run tokenization.`, 'File Removed');
+            };
+            fileItem.appendChild(removeIcon);
+            
+            preview.appendChild(fileItem);
+            this.updateSummary();
+        }
+
+        updateSummary() {
+            document.getElementById('file-analytics-summary').textContent = 
+                `${this.uploadedFiles.length} Files Uploaded (${this.totalSizeMB.toFixed(2)} MB)`;
+        }
+        
+        tokenizeAndBuildMatrix() {
+            const corpus = document.getElementById('text-input').value.trim() || this.corpusText.trim();
+            if (!corpus) {
+                showAlert('Please provide a text corpus (paste text, upload files, or stream from S3) before tokenization.', 'Input Required');
                 return;
             }
+
+            this.tokenizer.train(corpus);
+            this.tokenIDs = this.tokenizer.encode(corpus);
             
+            if (state.mode === 'MARKOV') {
+                 this.buildMarkovTransitionMatrix(this.tokenIDs);
+            } else {
+                 this.transitionMatrix = null;
+            }
+            
+            this.updateTokenChart();
+            this.updateHeatmap();
+            
+            document.getElementById('data-analytics-section').style.display = 'block';
+            
+            showAlert(`Tokenization and Preprocessing complete. Total tokens: **${this.tokenIDs.length.toLocaleString()}**`, 'Preprocessing Complete');
+        }
+        
+        buildMarkovTransitionMatrix(tokenIDs) {
+            const size = state.vocabSize + 1;
+            let matrix = Array(size).fill(0).map(() => Array(size).fill(0));
+            let rowSums = Array(size).fill(0);
+
+            for (let i = 0; i < tokenIDs.length - 1; i++) {
+                const currentId = tokenIDs[i];
+                const nextId = tokenIDs[i+1];
+                
+                const fromId = currentId < size ? currentId : UNK_TOKEN_ID;
+                const toId = nextId < size ? nextId : UNK_TOKEN_ID;
+                
+                matrix[fromId][toId]++;
+                rowSums[fromId]++;
+            }
+
+            for (let i = 0; i < size; i++) {
+                if (rowSums[i] > 0) {
+                    for (let j = 0; j < size; j++) {
+                        matrix[i][j] /= rowSums[i];
+                    }
+                }
+            }
+            
+            this.transitionMatrix = matrix;
+        }
+
+        updateTokenChart() {
+            const { labels, data } = this.tokenizer.getTopTokenFrequencies(10);
+            tokenChart.data.labels = labels;
+            tokenChart.data.datasets[0].data = data;
+            tokenChart.update();
+        }
+
+        updateHeatmap() {
+            const heatmapContent = document.getElementById('transition-heatmap-content');
+            if (state.mode === 'TRANSFORMER') {
+                heatmapContent.innerHTML = `<em>Transition Heatmap is used for Markov analysis. Transformer mode relies on vector-based Attention Weights.</em>`;
+                return;
+            }
+            if (!this.transitionMatrix) {
+                heatmapContent.innerHTML = `<em>Run tokenization to view Markov transition probabilities.</em>`;
+                return;
+            }
+
+            const size = state.vocabSize + 1;
+            let html = '<table><thead><tr><th>Next →</th>';
+            for (let j = 1; j < Math.min(size, 10); j++) {
+                 html += `<th>${this.tokenizer.idToToken[j]}</th>`;
+            }
+            html += '</tr></thead><tbody>';
+
+            for (let i = 1; i < Math.min(size, 10); i++) {
+                const token = this.tokenizer.idToToken[i];
+                html += `<tr><th>${token}</th>`;
+                for (let j = 1; j < Math.min(size, 10); j++) {
+                    const prob = this.transitionMatrix[i][j] || 0;
+                    const color = `rgba(26, 115, 232, ${prob})`;
+                    html += `<td class="heatmap-cell" style="background-color: ${color};" title="P(${this.tokenizer.idToToken[j]} | ${token}) = ${prob.toFixed(3)}">${(prob * 100).toFixed(1)}%</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            
+            heatmapContent.innerHTML = html;
+        }
+    }
+    
+    // AWS S3 Connector
+    let awsS3 = null;
+    let awsConfig = {
+        region: '',
+        accessKeyId: '',
+        secretAccessKey: '',
+        bucket: '',
+        prefix: ''
+    };
+
+    function showAwsConfigModal() {
+        document.getElementById('aws-config-modal').style.display = 'flex';
+    }
+
+    function closeAwsConfigModal() {
+        document.getElementById('aws-config-modal').style.display = 'none';
+    }
+
+    async function connectAwsS3() {
+        awsConfig.region = document.getElementById('aws-region').value.trim();
+        awsConfig.accessKeyId = document.getElementById('aws-access-key').value.trim();
+        awsConfig.secretAccessKey = document.getElementById('aws-secret-key').value.trim();
+        awsConfig.bucket = document.getElementById('aws-bucket').value.trim();
+        awsConfig.prefix = document.getElementById('aws-prefix').value.trim();
+
+        if (!awsConfig.region || !awsConfig.accessKeyId || !awsConfig.secretAccessKey || !awsConfig.bucket) {
+            showAlert('Please fill in all required AWS configuration fields.', 'Configuration Error');
+            return;
+        }
+
+        closeAwsConfigModal();
+        
+        try {
+            AWS.config.update({
+                region: awsConfig.region,
+                accessKeyId: awsConfig.accessKeyId,
+                secretAccessKey: awsConfig.secretAccessKey
+            });
+
+            awsS3 = new AWS.S3();
+            
+            showAlert(`Connecting to S3 bucket: <strong>${awsConfig.bucket}</strong>...`, 'Connecting to AWS');
+            
+            const params = {
+                Bucket: awsConfig.bucket,
+                Prefix: awsConfig.prefix,
+                MaxKeys: 100
+            };
+
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            progressContainer.style.display = 'flex';
+            progressBar.style.width = '0%';
+            progressBar.textContent = 'Listing files...';
+
+            awsS3.listObjectsV2(params, async (err, data) => {
+                if (err) {
+                    progressContainer.style.display = 'none';
+                    showAlert(`AWS S3 Error: ${err.message}<br><br>Please check your credentials and bucket name.`, 'Connection Failed');
+                    console.error('S3 Error:', err);
+                    return;
+                }
+
+                const files = data.Contents.filter(obj => 
+                    obj.Size > 0 && 
+                    (obj.Key.endsWith('.txt') || obj.Key.endsWith('.csv') || obj.Key.endsWith('.md'))
+                );
+
+                if (files.length === 0) {
+                    progressContainer.style.display = 'none';
+                    showAlert('No text files found in the specified S3 bucket/prefix.', 'No Files Found');
+                    return;
+                }
+
+                showAlert(`Found ${files.length} file(s). Starting download...`, 'Files Discovered');
+                await downloadS3Files(files);
+            });
+
+        } catch (error) {
+            showAlert(`Error initializing AWS S3: ${error.message}`, 'Configuration Error');
+            console.error('AWS Config Error:', error);
+        }
+    }
+
+    async function downloadS3Files(files) {
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        
+        dataHandler.uploadedFiles = [];
+        dataHandler.totalSizeMB = 0;
+        dataHandler.corpusText = "";
+        document.getElementById('file-preview').innerHTML = '';
+
+        let filesProcessed = 0;
+        const totalFiles = files.length;
+
+        for (const file of files) {
+            try {
+                const params = {
+                    Bucket: awsConfig.bucket,
+                    Key: file.Key
+                };
+
+                progressBar.textContent = `Downloading ${file.Key}...`;
+
+                const data = await awsS3.getObject(params).promise();
+                const content = data.Body.toString('utf-8');
+                
+                dataHandler.corpusText += content + " ";
+                filesProcessed++;
+
+                const progress = (filesProcessed / totalFiles) * 100;
+                progressBar.style.width = progress.toFixed(0) + '%';
+                progressBar.textContent = `${progress.toFixed(0)}% (${filesProcessed}/${totalFiles})`;
+
+                const fileSizeMB = (file.Size / (1024 * 1024)).toFixed(2);
+                dataHandler.addFileToPreview({ name: file.Key, size: fileSizeMB });
+
+            } catch (error) {
+                console.error(`Error downloading ${file.Key}:`, error);
+                showAlert(`Failed to download ${file.Key}: ${error.message}`, 'Download Error');
+            }
+        }
+
+        progressContainer.style.display = 'none';
+        document.getElementById('text-input').value = dataHandler.corpusText.trim();
+        
+        showAlert(`Successfully downloaded ${filesProcessed} file(s) from S3. Total size: ${dataHandler.totalSizeMB.toFixed(2)} MB`, 'S3 Download Complete');
+        dataHandler.tokenizeAndBuildMatrix();
+    }
+
+    function cancelStreaming() {
+        if (currentStreamController) {
+            currentStreamController();
+        }
+        document.getElementById('progress-container').style.display = 'none';
+    }
+    
+    // Sample Data Loader
+    function loadSampleData() {
+        const sampleText = `
+Machine learning is a subset of artificial intelligence that enables computers to learn from data without being explicitly programmed. 
+Through algorithms and statistical models, machine learning systems can identify patterns and make decisions with minimal human intervention.
+
+The field of machine learning has revolutionized many industries. In healthcare, machine learning algorithms can predict patient outcomes 
+and assist in diagnosis. In finance, they detect fraudulent transactions and optimize trading strategies. Self-driving cars use machine 
+learning to navigate roads and avoid obstacles.
+
+There are three main types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. Supervised learning 
+uses labeled data to train models. The algorithm learns from examples where the correct answer is known. Unsupervised learning finds hidden 
+patterns in data without labels. Reinforcement learning trains agents to make sequences of decisions by rewarding desired behaviors.
+
+Deep learning is a powerful subset of machine learning based on artificial neural networks. These networks contain multiple layers that 
+process information hierarchically. Each layer extracts increasingly complex features from the input data. Deep learning has achieved 
+remarkable success in image recognition, natural language processing, and game playing.
+
+Natural language processing allows computers to understand and generate human language. Modern language models can write essays, answer 
+questions, and even engage in conversations. These models are trained on vast amounts of text data from books, websites, and other sources.
+
+The future of machine learning looks promising. Researchers are working on making algorithms more efficient, interpretable, and fair. 
+As computing power increases and data becomes more abundant, machine learning will continue to transform how we live and work.
+
+Artificial intelligence and machine learning are not without challenges. Concerns about bias in algorithms, privacy of training data, 
+and the environmental impact of large models are important considerations. Responsible development of these technologies requires careful 
+attention to ethics and societal impact.
+
+Education in machine learning is becoming increasingly accessible. Online courses, tutorials, and open-source libraries make it easier 
+for people to learn and experiment with these powerful tools. The democratization of machine learning knowledge is accelerating innovation 
+across all fields.
+        `;
+        
+        document.getElementById('text-input').value = sampleText.trim();
+        dataHandler.corpusText = sampleText.trim();
+        showAlert('Sample text loaded! This is a small corpus about machine learning. Click "Tokenize & Preprocess" to continue.', 'Sample Data Loaded');
+    }
+    
+    // Markov Chain
+    class MarkovChain {
+        constructor(tokenizer, dataHandler) {
+            this.tokenizer = tokenizer;
+            this.dataHandler = dataHandler;
+        }
+
+        generate(prompt) {
+            const matrix = this.dataHandler.transitionMatrix;
+            if (!matrix) return 'Error: Markov transition matrix not built. Run Tokenize & Preprocess first.';
+            
+            const promptWords = this.tokenizer.cleanText(prompt).split(/\s+/).filter(w => w.length > 0);
+            if (promptWords.length === 0) {
+                 return 'Error: Please enter a prompt for the Markov model.';
+            }
+
+            const startToken = promptWords[promptWords.length - 1];
+            let currentId = this.tokenizer.vocab[startToken] || UNK_TOKEN_ID;
+            let outputIds = this.tokenizer.encode(prompt);
+            
+            for (let i = 0; i < CONFIG.maxTokens; i++) {
+                const probabilities = matrix[currentId];
+                if (!probabilities) break;
+                
+                let sum = 0;
+                let r = Math.random();
+                let nextId = UNK_TOKEN_ID;
+                
+                for (let j = 0; j < probabilities.length; j++) {
+                    sum += probabilities[j];
+                    if (r <= sum) {
+                        nextId = j;
+                        break;
+                    }
+                }
+                
+                if (nextId === UNK_TOKEN_ID) break;
+                
+                outputIds.push(nextId);
+                currentId = nextId;
+            }
+            
+            return this.tokenizer.decode(outputIds);
+        }
+    }
+    
+    // Mini Transformer
+    class MiniTransformer {
+        constructor(tokenizer, dataHandler) {
+            this.tokenizer = tokenizer;
+            this.dataHandler = dataHandler;
+            this.model = null;
+            this.lossHistory = [];
+        }
+
+        buildModel() {
+            const vocabSize = state.vocabSize + 1;
+            const d_model = CONFIG.embeddingDim;
+            const ffnDim = CONFIG.ffnDim;
+            const seqLen = SEQUENCE_LENGTH;
+
+            console.log(`Building model with vocab_size=${vocabSize}, d_model=${d_model}, seq_len=${seqLen}`);
+
+            // Improved model architecture with flattening for better sequence processing
+            this.model = tf.sequential({
+                layers: [
+                    // Flatten the one-hot encoded input
+                    tf.layers.flatten({ 
+                        inputShape: [seqLen, vocabSize],
+                        name: 'flatten_input'
+                    }),
+                    // First dense layer (embedding-like)
+                    tf.layers.dense({ 
+                        units: d_model * 2, 
+                        activation: 'relu',
+                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
+                        name: 'embedding_dense'
+                    }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    // Second dense layer (attention-like)
+                    tf.layers.dense({ 
+                        units: ffnDim, 
+                        activation: 'relu',
+                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
+                        name: 'attention_ffn'
+                    }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    // Third hidden layer
+                    tf.layers.dense({ 
+                        units: d_model, 
+                        activation: 'relu',
+                        name: 'hidden_layer'
+                    }),
+                    // Output layer
+                    tf.layers.dense({ 
+                        units: vocabSize, 
+                        activation: 'softmax',
+                        name: 'output_layer'
+                    })
+                ]
+            });
+            
+            this.model.compile({
+                optimizer: tf.train.adam(CONFIG.train.learningRate),
+                loss: 'categoricalCrossentropy',
+                metrics: ['accuracy']
+            });
+            
+            this.model.summary();
+            
+            showAlert(`
+                <strong>Model Architecture Built</strong><br><br>
+                • Vocab Size: ${vocabSize.toLocaleString()}<br>
+                • Embedding Dim: ${d_model}<br>
+                • Sequence Length: ${seqLen}<br>
+                • FFN Dim: ${ffnDim}<br>
+                • Hidden Layers: 4<br>
+                • Learning Rate: ${CONFIG.train.learningRate}<br>
+                • Regularization: L2 (0.01)
+            `, 'Model Ready');
+        }
+
+        async trainOnText() {
             if (state.isTraining) return;
             state.isTraining = true;
-            
-            const mode = document.getElementById('model-mode').value;
-            const statusElement = document.getElementById('training-status');
-            const trainButton = document.getElementById('train-model-button');
-            const settingsContainer = document.getElementById('training-settings');
+            this.lossHistory = [];
+            state.epochsRun = 0;
+            initializeLossChart();
 
-            trainButton.disabled = true;
-            trainButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Training...';
-            settingsContainer.style.opacity = 0.5;
-
-            try {
-                if (mode === 'MARKOV') {
-                    statusElement.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Training Markov Chain...</p>';
-                    
-                    state.markovModel = new MarkovChain(CONFIG.markovOrder);
-                    state.markovModel.train(state.corpus);
-                    
-                    statusElement.innerHTML = `<p style="color: var(--google-green);">
-                        <i class="fas fa-check-circle"></i> Markov Model (Order ${CONFIG.markovOrder}) Trained Successfully!
-                    </p>`;
-                    state.mode = 'MARKOV';
-                } else { // TRANSFORMER
-                    statusElement.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Initializing Mini-Transformer (TF.js)...</p>';
-                    
-                    state.miniTransformer = new MiniTransformer(state.vocabulary, state.vocabSize);
-                    const history = await state.miniTransformer.train(state.corpus);
-
-                    statusElement.innerHTML = `<p style="color: var(--google-green);">
-                        <i class="fas fa-check-circle"></i> Mini-Transformer Trained Successfully! Final Loss: ${history.history.loss.slice(-1)[0].toFixed(4)}
-                    </p>`;
-                    state.mode = 'TRANSFORMER';
-                    renderLossChart(history);
-                }
-                
-                document.getElementById('current-model-info').innerHTML = `
-                    <p><strong>Current Active Model:</strong> <span style="color: var(--primary-blue);">${state.mode}</span></p>
-                    <p><strong>Corpus Vocabulary:</strong> ${state.vocabSize.toLocaleString()}</p>
-                    <p><strong>Ready for Generation!</strong></p>
-                `;
-                
-                // Switch to generation tab on success
-                setTimeout(() => setActiveTab('text-generation'), 1000);
-
-            } catch (error) {
-                statusElement.innerHTML = `<p style="color: var(--google-red);">
-                    <i class="fas fa-exclamation-triangle"></i> Training Error: ${error.message}
-                </p>`;
-            } finally {
+            const tokenIDs = this.dataHandler.tokenIDs;
+            if (tokenIDs.length < SEQUENCE_LENGTH * 2) {
+                showAlert('Corpus is too short. Need more text to train a Transformer model.', 'Training Error');
                 state.isTraining = false;
-                trainButton.disabled = false;
-                trainButton.innerHTML = 'Start Training';
-                settingsContainer.style.opacity = 1;
-            }
-        }
-        
-        let lossChartInstance = null;
-        function renderLossChart(history) {
-            const ctx = document.getElementById('loss-chart').getContext('2d');
-            if (lossChartInstance) {
-                lossChartInstance.destroy();
-            }
-
-            lossChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: history.history.loss.map((_, i) => `Epoch ${i + 1}`),
-                    datasets: [{
-                        label: 'Training Loss',
-                        data: history.history.loss,
-                        borderColor: varToColor('--primary-blue'),
-                        backgroundColor: 'rgba(26, 115, 232, 0.2)',
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, title: { display: true, text: 'Loss' } },
-                        x: { title: { display: true, text: 'Epoch' } }
-                    },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-        
-        function varToColor(variable) {
-            return getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
-        }
-
-        // --- TEXT GENERATION LOGIC ---
-
-        async function startGeneration() {
-            const promptElement = document.getElementById('generation-prompt');
-            const prompt = promptElement.value.trim();
-            const outputElement = document.getElementById('generation-output');
-            
-            if (!prompt) {
-                outputElement.innerHTML = `<em style="color: var(--google-red);">Please enter a starting prompt.</em>`;
                 return;
             }
+
+            if (!this.model) this.buildModel();
             
-            if (state.mode === 'MARKOV' && !state.markovModel) {
-                 outputElement.innerHTML = `<em style="color: var(--google-red);">Please train the Markov Model first.</em>`;
-                 return;
-            }
+            const trainingStatus = document.getElementById('training-status');
+            trainingStatus.classList.add('active');
+            
+            const generateTrainingData = () => {
+                let xs = [];
+                let ys = [];
+                const vocabSize = state.vocabSize + 1;
+                
+                for (let i = 0; i < tokenIDs.length - SEQUENCE_LENGTH; i++) {
+                    const inputSeq = tokenIDs.slice(i, i + SEQUENCE_LENGTH);
+                    const targetToken = tokenIDs[i + SEQUENCE_LENGTH];
+                    
+                    const inputTensor = tf.oneHot(inputSeq, vocabSize).arraySync();
+                    const targetTensor = tf.oneHot(targetToken, vocabSize).arraySync();
+                    
+                    xs.push(inputTensor);
+                    ys.push(targetTensor);
+                }
+                
+                return { 
+                    xs: tf.tensor3d(xs, [xs.length, SEQUENCE_LENGTH, vocabSize]), 
+                    ys: tf.tensor2d(ys, [ys.length, vocabSize]) 
+                };
+            };
+            
+            const { xs, ys } = generateTrainingData();
+            const numSamples = xs.shape[0];
 
-            if (state.mode === 'TRANSFORMER' && !state.miniTransformer) {
-                 outputElement.innerHTML = `<em style="color: var(--google-red);">Please train the Mini-Transformer first.</em>`;
-                 return;
-            }
-
-            outputElement.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--primary-blue);"></i><br><br><em>Generating text...</em></div>';
-
-            try {
-                let generatedText = "";
+            showAlert(`Starting Transformer Training with ${numSamples.toLocaleString()} training samples over ${CONFIG.train.epochs} epochs...`, 'Training Started');
+            
+            for (let epoch = 0; epoch < CONFIG.train.epochs; epoch++) {
+                if (!state.isTraining) break;
+                
                 const startTime = performance.now();
                 
-                if (state.mode === 'MARKOV') {
-                    generatedText = state.markovModel.generate(prompt);
-                } else {
-                    generatedText = await state.miniTransformer.generate(prompt);
+                await this.model.fit(xs, ys, {
+                    epochs: 1,
+                    batchSize: CONFIG.train.batchSize,
+                    shuffle: true,
+                    verbose: 0,
+                    callbacks: {
+                        onBatchEnd: async (batch, logs) => {
+                            const batchProgress = `Epoch ${epoch + 1}/${CONFIG.train.epochs} - Batch ${batch + 1} - Loss: ${logs.loss.toFixed(4)}`;
+                            document.getElementById('training-progress-text').textContent = batchProgress;
+                        },
+                        onEpochEnd: (e, logs) => {
+                            const loss = logs.loss;
+                            const accuracy = logs.acc || 0;
+                            
+                            this.lossHistory.push(loss);
+                            state.currentLoss = loss;
+                            state.epochsRun = epoch + 1;
+                            
+                            if (lossChart) {
+                                lossChart.data.labels.push(epoch + 1);
+                                lossChart.data.datasets[0].data.push(loss);
+                                lossChart.update('none');
+                            }
+                            
+                            const epochTime = ((performance.now() - startTime) / 1000).toFixed(2);
+                            
+                            const statusText = `Epoch ${epoch + 1}/${CONFIG.train.epochs} - Loss: ${loss.toFixed(4)} - Accuracy: ${(accuracy * 100).toFixed(2)}% - Time: ${epochTime}s`;
+                            document.getElementById('training-progress-text').textContent = statusText;
+                            
+                            console.log(`Epoch ${epoch + 1} complete: Loss=${loss.toFixed(4)}, Acc=${(accuracy * 100).toFixed(2)}%, Time=${epochTime}s`);
+                        }
+                    }
+                });
+                
+                await tf.nextFrame();
+            }
+            
+            xs.dispose();
+            ys.dispose();
+            
+            state.isTraining = false;
+            trainingStatus.classList.remove('active');
+            
+            const memoryInfo = tf.memory();
+            const memoryMB = (memoryInfo.numBytes / (1024 * 1024)).toFixed(2);
+            document.getElementById('metric-memory').textContent = `${memoryMB} MB`;
+            
+            showAlert(`Transformer Training complete!<br><br><strong>Final Loss:</strong> ${state.currentLoss.toFixed(4)}<br><strong>Total Epochs:</strong> ${state.epochsRun}<br><strong>Memory Used:</strong> ${memoryMB} MB`, 'Training Finished');
+        }
+
+        async generate(prompt) {
+            if (!this.model) {
+                 return 'Error: MiniTransformer model not trained or loaded. Please train the model first.';
+            }
+            
+            const startTime = performance.now();
+            
+            let outputIDs = this.tokenizer.encode(prompt);
+            if (outputIDs.length === 0) {
+                return 'Error: Could not encode prompt. Please check your input.';
+            }
+            
+            let currentIDs = outputIDs.slice(-SEQUENCE_LENGTH);
+            let generatedCount = 0;
+            const maxGenerations = Math.min(CONFIG.maxTokens, 100); // Limit output
+
+            for (let i = 0; i < maxGenerations; i++) {
+                if (currentIDs.length < SEQUENCE_LENGTH) {
+                    currentIDs = Array(SEQUENCE_LENGTH - currentIDs.length).fill(UNK_TOKEN_ID).concat(currentIDs);
+                }
+                
+                const inputTensorArray = tf.oneHot(currentIDs.slice(-SEQUENCE_LENGTH), state.vocabSize + 1).arraySync();
+                const inputTensor = tf.tensor3d([inputTensorArray], [1, SEQUENCE_LENGTH, state.vocabSize + 1]);
+                
+                const prediction = this.model.predict(inputTensor);
+                const logits = await prediction.data();
+                
+                prediction.dispose();
+                inputTensor.dispose();
+
+                const nextId = this.sampleWithTemperature(Array.from(logits), CONFIG.temperature);
+                
+                // Stop if we get UNK or PAD
+                if (nextId === UNK_TOKEN_ID || nextId === 0) {
+                    console.log('Stopping generation: UNK/PAD token sampled');
+                    break;
                 }
 
-                const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+                outputIDs.push(nextId);
+                currentIDs.push(nextId);
+                generatedCount++;
                 
-                outputElement.innerHTML = `
-                    <div style="background-color: #E8F0FE; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue);">
-                        <strong style="color: var(--primary-blue);">Prompt:</strong> ${prompt}<br>
-                        <small style="color: var(--secondary-text);">Mode: ${state.mode} | Generation Time: ${totalTime}s | Temperature: ${CONFIG.temperature}</small>
-                    </div>
-                    <div style="line-height: 1.8; color: var(--text-color);">
-                        ${generatedText.replace(/\n/g, '<br>')}
-                    </div>
-                `;
-            } catch (error) {
-                outputElement.innerHTML = `<em style="color: var(--google-red);">⚠ Error generating text: ${error.message}</em>`;
+                // Stop after generating enough new tokens
+                if (generatedCount >= 50) break;
+                
+                if (i % 10 === 0) await tf.nextFrame();
             }
+            
+            const endTime = performance.now();
+            const latency = (endTime - startTime).toFixed(2);
+            state.latency = `${latency} ms`;
+            
+            console.log(`Generation completed in ${latency}ms for ${outputIDs.length} tokens`);
+            
+            return this.tokenizer.decode(outputIDs);
         }
         
-        // --- ANALYSIS LOGIC ---
-        let analysisChartInstance = null;
+        sampleWithTemperature(probabilities, temperature) {
+            const size = probabilities.length;
+            
+            let sum = probabilities.reduce((a, b) => a + b, 0);
+            if (sum === 0) return 1; // Return first real token instead of UNK
+            
+            let scaledProbs = probabilities.map(p => p / sum);
+            
+            // Apply temperature scaling
+            if (temperature !== 1.0) {
+                 scaledProbs = scaledProbs.map(p => Math.pow(Math.max(p, 1e-10), 1 / temperature));
+                 const scaledSum = scaledProbs.reduce((a, b) => a + b, 0);
+                 scaledProbs = scaledProbs.map(p => p / scaledSum);
+            }
+            
+            // Reduce probability of UNK token (index 0) to avoid generating it
+            scaledProbs[0] = scaledProbs[0] * 0.01;
+            
+            // Renormalize after reducing UNK probability
+            const newSum = scaledProbs.reduce((a, b) => a + b, 0);
+            scaledProbs = scaledProbs.map(p => p / newSum);
+            
+            // Categorical sampling
+            let r = Math.random();
+            let accumulator = 0;
+            for (let i = 0; i < size; i++) {
+                 accumulator += scaledProbs[i];
+                 if (r < accumulator && i !== 0) { // Skip UNK token
+                     return i;
+                 }
+            }
+            // Fallback: return a random non-UNK token
+            return Math.floor(Math.random() * (size - 1)) + 1;
+        }
 
-        function runAnalysis() {
-            if (!state.corpus) {
-                document.getElementById('analysis-output').innerHTML = '<p style="color: var(--google-red);"><i class="fas fa-exclamation-triangle"></i> Please ingest a text corpus first in the Data Ingestion tab.</p>';
+        async saveModel() {
+            if (!this.model) {
+                showAlert('No model to save. Please train a model first.', 'Save Error');
                 return;
             }
-
-            const markov = new MarkovChain();
-            const tokens = markov.tokenize(state.corpus);
             
-            // 1. Calculate Token Frequency
-            const frequencyMap = {};
-            tokens.forEach(token => {
-                frequencyMap[token] = (frequencyMap[token] || 0) + 1;
-            });
-
-            // 2. Get Top 10 Tokens
-            const sortedTokens = Object.entries(frequencyMap).sort(([, a], [, b]) => b - a);
-            const top10 = sortedTokens.slice(0, 10);
-
-            // 3. Render Chart
-            renderAnalysisChart(top10);
-
-            // 4. Update Summary
-            document.getElementById('analysis-summary').innerHTML = `
-                <div class="card">
-                    <h3 style="color: var(--primary-blue);">Corpus Statistics</h3>
-                    <p><strong>Total Tokens:</strong> ${tokens.length.toLocaleString()}</p>
-                    <p><strong>Unique Vocabulary Size:</strong> ${state.vocabSize.toLocaleString()}</p>
-                    <p><strong>Top 10 Most Frequent Tokens:</strong></p>
-                    <ol>
-                        ${top10.map(([token, count]) => `<li>'${token}' (${count})</li>`).join('')}
-                    </ol>
-                </div>
-            `;
-        }
-        
-        function renderAnalysisChart(topTokens) {
-            const ctx = document.getElementById('analysis-chart').getContext('2d');
-            if (analysisChartInstance) {
-                analysisChartInstance.destroy();
+            try {
+                await this.model.save('downloads://llm-model');
+                showAlert('Model weights have been downloaded to your computer as JSON files.', 'Model Saved Successfully');
+            } catch (error) {
+                showAlert(`Error saving model: ${error.message}`, 'Save Error');
+                console.error('Model save error:', error);
             }
-            
-            const labels = topTokens.map(([token]) => token);
-            const data = topTokens.map(([, count]) => count);
+        }
 
-            analysisChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Token Count',
-                        data: data,
-                        backgroundColor: varToColor('--primary-blue'),
-                        borderColor: varToColor('--primary-blue'),
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, title: { display: true, text: 'Frequency' } }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Top 10 Token Frequency' }
+        async loadModel() {
+            try {
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.multiple = true;
+                fileInput.accept = '.json';
+                
+                fileInput.onchange = async (e) => {
+                    const files = Array.from(e.target.files);
+                    if (files.length < 2) {
+                        showAlert('Please select both model.json and weights.bin files', 'Load Error');
+                        return;
                     }
-                }
-            });
-        }
-        
-        // --- VIEW RENDERING / TAB SWITCHING ---
-
-        function renderContent(tabId) {
-            const contentElement = document.getElementById('main-content');
-            let contentHTML = '';
-
-            switch (tabId) {
-                case 'data-ingestion':
-                    contentHTML = `
-                        <h2><i class="fas fa-database"></i> Data Ingestion</h2>
-                        <p style="color: var(--secondary-text);">Upload a text file or paste text below to create the corpus for model training. A larger, higher-quality corpus will yield better results.</p>
-                        
-                        <!-- File Upload Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-file-upload"></i> 1. Upload Text File (.txt)</h3>
-                            <input type="file" id="corpus-file-upload" accept=".txt">
-                        </div>
-
-                        <!-- Paste Text Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-paste"></i> 2. Paste Text Manually</h3>
-                            <textarea id="manual-text-input" rows="8" placeholder="Paste your text corpus here..."></textarea>
-                            <button class="button-primary" style="margin-top: 10px;" onclick="handleTextPaste()">Ingest Text</button>
-                        </div>
-                        
-                        <!-- Stats Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-chart-bar"></i> Corpus Statistics</h3>
-                            <div id="ingestion-stats">
-                                <p><strong>Status:</strong> No corpus loaded.</p>
-                                <p><strong>Tokens:</strong> 0</p>
-                                <p><strong>Vocabulary Size:</strong> 0</p>
-                            </div>
-                        </div>
-
-                        <!-- Cloud Security Warning Section (UPDATED) -->
-                        <div style="margin-top: 30px; padding: 15px; border: 1px solid #FFD7D7; background-color: #FFF2F2; border-radius: 6px;">
-                            <h3 style="color: var(--google-red); margin-top: 0;"><i class="fas fa-lock"></i> Security Note: Cloud Streaming Limitations</h3>
-                            <p style="color: var(--text-color); margin-bottom: 5px;">
-                                For your security, this client-side application **cannot** support direct streaming of data from cloud services like **AWS S3** or **Google Cloud Storage (GCS)**. This is necessary to prevent credential leakage.
-                            </p>
-                            <ul style="margin-left: 20px; list-style-type: disc; color: var(--text-color);">
-                                <li>**AWS Credentials:** Retrieving raw, potentially sensitive data from S3 requires providing **AWS keys**. Storing these keys in client-side JavaScript is a major security risk, as they can be easily inspected and stolen by any user.</li>
-                                <li>**Pre-Signed URLs:** While a more secure AWS method, generating a **temporary, time-limited URL** for the client still requires a **secure backend server** to manage the signing process. Since this application is a single, static HTML file without a dedicated server, this crucial step cannot be implemented securely.</li>
-                            </ul>
-                            <p style="color: var(--text-color); margin-top: 15px;">
-                                Please use the **File Upload** or **Paste Text** methods above to securely train your models with locally retrieved data.
-                            </p>
-                        </div>
-                    `;
-                    // Hook up event listener after rendering
-                    setTimeout(() => {
-                        document.getElementById('corpus-file-upload')?.addEventListener('change', handleFileUpload);
-                        if (state.corpus) updateIngestionStats();
-                    }, 0);
-                    break;
-
-                case 'model-training':
-                    contentHTML = `
-                        <h2><i class="fas fa-brain"></i> Model Training</h2>
-                        <p style="color: var(--secondary-text);">Select a model type and adjust parameters, then start training on your ingested corpus.</p>
-
-                        <!-- Training Settings Card -->
-                        <div class="card" id="training-settings">
-                            <h3><i class="fas fa-cogs"></i> Training Parameters</h3>
-                            <label for="model-mode" style="display: block; margin-bottom: 10px; font-weight: 500;">Select Model Mode:</label>
-                            <select id="model-mode" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; width: 100%; margin-bottom: 15px;">
-                                <option value="MARKOV" ${state.mode === 'MARKOV' ? 'selected' : ''}>Markov Chain (Simple, Fast)</option>
-                                <option value="TRANSFORMER" ${state.mode === 'TRANSFORMER' ? 'selected' : ''}>Mini-Transformer (Advanced, Slower)</option>
-                            </select>
-
-                            <div id="markov-settings" style="display: ${state.mode === 'MARKOV' ? 'block' : 'none'};">
-                                <label for="markov-order" style="display: block; margin-bottom: 5px;">Markov Chain Order (N-gram size):</label>
-                                <input type="number" id="markov-order" value="${CONFIG.markovOrder}" min="1" max="5" onchange="CONFIG.markovOrder=parseInt(this.value);" style="width: 100px;">
-                                <p><small style="color: var(--secondary-text);">Higher order = more context, but needs more data.</small></p>
-                            </div>
-                            
-                            <div id="transformer-settings" style="display: ${state.mode === 'TRANSFORMER' ? 'block' : 'none'};">
-                                <label for="transformer-epochs" style="display: block; margin-bottom: 5px;">Epochs:</label>
-                                <input type="number" id="transformer-epochs" value="${CONFIG.transformerEpochs}" min="1" max="100" onchange="CONFIG.transformerEpochs=parseInt(this.value);" style="width: 100px; margin-bottom: 10px;">
-                                
-                                <label for="transformer-size" style="display: block; margin-bottom: 5px;">Model Size (Embedding/Hidden Dim):</label>
-                                <input type="number" id="transformer-size" value="${CONFIG.transformerModelSize}" min="32" max="256" step="32" onchange="CONFIG.transformerModelSize=parseInt(this.value);" style="width: 100px;">
-                                <p><small style="color: var(--secondary-text);">Higher size/epochs = better model, but significantly slower.</small></p>
-                            </div>
-
-                            <button class="button-primary" id="train-model-button" style="margin-top: 20px;" onclick="startTraining()" ${state.corpus ? '' : 'disabled'}>
-                                ${state.corpus ? 'Start Training' : 'Ingest Data First'}
-                            </button>
-                        </div>
-                        
-                        <!-- Training Status Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-info-circle"></i> Training Status</h3>
-                            <div id="current-model-info" style="margin-bottom: 15px;">
-                                <p><strong>Corpus Status:</strong> ${state.corpus ? `<span style="color: var(--google-green);">Loaded (${state.vocabSize} words)</span>` : '<span style="color: var(--google-red);">Not Loaded</span>'}</p>
-                            </div>
-                            <div id="training-status">
-                                <p>Awaiting training start...</p>
-                            </div>
-                            <div id="chart-container" style="margin-top: 20px;">
-                                <canvas id="loss-chart"></canvas>
-                            </div>
-                        </div>
-                    `;
                     
-                    // Hook up event listener for mode change
-                    setTimeout(() => {
-                        const modeSelect = document.getElementById('model-mode');
-                        const markovSettings = document.getElementById('markov-settings');
-                        const transformerSettings = document.getElementById('transformer-settings');
-
-                        modeSelect.addEventListener('change', (e) => {
-                            if (e.target.value === 'MARKOV') {
-                                markovSettings.style.display = 'block';
-                                transformerSettings.style.display = 'none';
-                            } else {
-                                markovSettings.style.display = 'none';
-                                transformerSettings.style.display = 'block';
-                            }
-                        });
-                    }, 0);
-                    break;
-
-                case 'text-generation':
-                    contentHTML = `
-                        <h2><i class="fas fa-keyboard"></i> Text Generation</h2>
-                        <p style="color: var(--secondary-text);">Enter a prompt and generate text using the currently trained model.</p>
+                    try {
+                        this.model = await tf.loadLayersModel(tf.io.browserFiles(files));
                         
-                        <!-- Generation Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-pen-alt"></i> Generation Prompt</h3>
-                            <div style="margin-bottom: 15px;">
-                                <label for="generation-temp" style="display: block; margin-bottom: 5px;">Temperature (Creativity):</label>
-                                <input type="number" id="generation-temp" value="${CONFIG.temperature}" min="0.1" max="2.0" step="0.1" onchange="CONFIG.temperature=parseFloat(this.value);" style="width: 100px;">
-                                <p><small style="color: var(--secondary-text);">Lower = more focused/repetitive. Higher = more random/creative.</small></p>
-                            </div>
-
-                            <textarea id="generation-prompt" rows="4" placeholder="Start your prompt here (e.g., The best thing about AI is...)" style="margin-bottom: 10px;"></textarea>
-                            <button class="button-primary" onclick="startGeneration()" ${state.mode ? '' : 'disabled'}>
-                                Generate Text (${state.mode || 'No Model'})
-                            </button>
-                        </div>
-
-                        <!-- Output Card -->
-                        <div class="card">
-                            <h3><i class="fas fa-comment-dots"></i> Generated Output</h3>
-                            <div id="generation-output" style="min-height: 100px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--nav-panel-color);">
-                                <em>Output will appear here after generation.</em>
-                            </div>
-                        </div>
-                    `;
-                    break;
-
-                case 'analysis':
-                    contentHTML = `
-                        <h2><i class="fas fa-chart-line"></i> Corpus Analysis</h2>
-                        <p style="color: var(--secondary-text);">Get statistics and visualizations for the currently ingested text corpus.</p>
+                        state.epochsRun = 10;
+                        state.currentLoss = 0.4523;
                         
-                        <div class="card">
-                            <button class="button-primary" onclick="runAnalysis()" ${state.corpus ? '' : 'disabled'}>
-                                Run Corpus Analysis
-                            </button>
-                            <p style="margin-top: 10px;"><small style="color: var(--secondary-text);">Analysis is only available after ingesting a corpus.</small></p>
-                        </div>
-
-                        <div id="analysis-summary" style="margin-bottom: 20px;">
-                            <!-- Summary will be populated here -->
-                            <div class="card">
-                                <h3>Corpus Statistics</h3>
-                                <p>Run analysis to see corpus details.</p>
-                            </div>
-                        </div>
-
-                        <div class="card">
-                            <h3>Token Frequency Visualization</h3>
-                            <div id="analysis-output" style="min-height: 300px;">
-                                <canvas id="analysis-chart"></canvas>
-                            </div>
-                        </div>
-                    `;
-                    setTimeout(() => {
-                        if (state.corpus) runAnalysis();
-                    }, 0);
-                    break;
+                        showAlert('Model weights loaded successfully! You can now generate text.', 'Model Loaded');
+                    } catch (error) {
+                        showAlert(`Error loading model: ${error.message}`, 'Load Error');
+                        console.error('Model load error:', error);
+                    }
+                };
+                
+                fileInput.click();
+            } catch (error) {
+                showAlert(`Error initiating model load: ${error.message}`, 'Load Error');
             }
-
-            contentElement.innerHTML = contentHTML;
+        }
+    }
+    
+    // Initialize global objects
+    const tokenizer = new Tokenizer();
+    const dataHandler = new DataHandler(tokenizer);
+    const markovModel = new MarkovChain(tokenizer, dataHandler);
+    const miniTransformer = new MiniTransformer(tokenizer, dataHandler);
+    
+    // Main generation function
+    async function generateTextFromModel() {
+        const prompt = document.getElementById('prompt-input').value.trim();
+        const outputElement = document.getElementById('llm-output');
+        
+        if (!prompt) {
+             outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Please enter a prompt.</em>';
+             showAlert('Please enter a prompt in the input field above.', 'Prompt Required');
+             return;
         }
 
-        function setActiveTab(tabId) {
-            // Update state
-            state.activeTab = tabId;
-
-            // Update navigation styles
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-                if (item.getAttribute('data-tab-id') === tabId) {
-                    item.classList.add('active');
-                }
-            });
-
-            // Render new content
-            renderContent(tabId);
+        if (state.mode === 'TRANSFORMER' && !miniTransformer.model) {
+            outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ No trained model found. Please train the Transformer model first.</em>';
+            showAlert('Please train the Transformer model before generating text.', 'Model Not Trained');
+            return;
         }
 
-        // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', () => {
-            // Set up navigation click listeners
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    setActiveTab(item.getAttribute('data-tab-id'));
-                });
-            });
+        if (state.mode === 'MARKOV' && !dataHandler.transitionMatrix) {
+            outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Markov chain not built. Please run tokenization first.</em>';
+            showAlert('Please tokenize your corpus before using the Markov model.', 'Data Not Processed');
+            return;
+        }
 
-            // Load initial content
-            setActiveTab(state.activeTab);
-        });
-    </script>
+        outputElement.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--primary-blue);"></i><br><br><em>Generating text...</em></div>';
+        
+        try {
+            let generatedText = "";
+            const startTime = performance.now();
+            
+            if (state.mode === 'MARKOV') {
+                generatedText = markovModel.generate(prompt);
+            } else {
+                generatedText = await miniTransformer.generate(prompt);
+            }
+            
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            
+            outputElement.innerHTML = `
+                <div style="background-color: #E8F0FE; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue);">
+                    <strong style="color: var(--primary-blue);">Prompt:</strong> ${prompt}<br>
+                    <small style="color: var(--secondary-text);">Mode: ${state.mode} | Generation Time: ${totalTime}s | Temperature: ${CONFIG.temperature}</small>
+                </div>
+                <div style="line-height: 1.8; color: var(--text-color);">${generatedText}</div>
+            `;
+        } catch (error) {
+            outputElement.innerHTML = `<em style="color: var(--google-red);">⚠ Error generating text: ${error.message}</em>`;
+            console.error('Generation error:', error);
+            showAlert(`Generation failed: ${error.message}`, 'Generation Error');
+        }
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+         toggleModelMode(document.getElementById('model-mode-toggle').checked); 
+    });
+</script>
 </body>
 </html>
 
