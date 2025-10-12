@@ -1,980 +1,360 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DIY LLM Toolkit | Modular Prototype</title>
-<link href="https://fonts.googleapis.com/css?family=Roboto:wght@300;400;500;700&display=swap"
-    rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
-<style>
-    /* --- Google Cloud/Material Design Variables --- */
-    :root {
-        --primary-blue: #1A73E8;
-        --header-blue: #1A2E44;
-        --nav-panel-color: #F1F3F4;
-        --active-item-color: #E8F0FE;
-        --surface-color: #FFFFFF;
-        --background-color: #F8F9FA;
-        --text-color: #202124;
-        --secondary-text: #5F6368;
-        --border-color: #DADCE0;
-        --google-red: #DB4437;
-        --google-green: #0F9D58;
-        --elevation-low: 0 1px 2px 0 rgba(0,0,0,0.1), 0 1px 3px 0 rgba(0,0,0,0.06);
-        --elevation-mid: 0 2px 4px 0 rgba(0,0,0,0.1), 0 2px 5px 0 rgba(0,0,0,0.08);
-    }
-    /* --- Base Layout --- */
-    body {
-        font-family: 'Roboto', sans-serif;
-        background-color: var(--background-color);
-        color: var(--text-color);
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-    }
-    .top-header {
-        background-color: var(--header-blue);
-        color: var(--surface-color);
-        padding: 10px 20px;
-        display: flex;
-        align-items: center;
-        box-shadow: var(--elevation-low);
-        z-index: 10;
-    }
-    .top-header h1 { font-size: 1.5em; font-weight: 400; margin: 0 30px 0 10px; white-space: nowrap; }
-    .top-header h1 i { color: #4285F4; margin-right: 8px; }
-    .main-content-area { display: flex; flex-grow: 1; }
-    .side-nav {
-        width: 250px;
-        background-color: var(--surface-color);
-        border-right: 1px solid var(--border-color);
-        padding: 15px 0;
-        flex-shrink: 0;
-    }
-    .nav-item { padding: 10px 20px; color: var(--secondary-text); font-size: 0.95em; cursor: pointer; transition: background-color 0.2s; }
-    .nav-item.active { background-color: var(--active-item-color); color: var(--primary-blue); border-left: 3px solid var(--primary-blue); font-weight: 500; padding-left: 17px; }
-    .nav-item i { margin-right: 12px; font-size: 1.1em; width: 20px; text-align: center; }
-    .content-wrapper { flex-grow: 1; padding: 30px; max-width: 1000px; }
-    h2 { color: var(--text-color); font-weight: 500; font-size: 1.6em; margin-top: 0; margin-bottom: 20px; }
-    .divider { margin: 30px 0; border: none; border-top: 1px solid var(--border-color); }
-    /* Model Mode Toggle */
-    .mode-toggle {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        padding: 10px 15px;
-        background-color: var(--surface-color);
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-        border-left: 4px solid var(--primary-blue);
-    }
-    .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-    .toggle-switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc;
-        transition: .4s; border-radius: 34px; }
-    .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px;
-        background-color: white; transition: .4s; border-radius: 50%;
-    }
-    input:checked + .slider { background-color: var(--google-green); }
-    input:checked + .slider:before { transform: translateX(26px); }
-    .mode-label { font-weight: 500; margin-right: 15px; color: var(--primary-blue); }
-    .mode-label span { color: var(--secondary-text); font-weight: 400; font-size: 0.9em;}
-    /* Model Controls Panel */
-    #model-controls-panel {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        padding: 20px;
-        background-color: var(--surface-color);
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-        margin-bottom: 20px;
-    }
-    .control-group label { display: block; font-size: 0.85em; color: var(--secondary-text); margin-bottom: 5px; }
-    .control-group input[type="number"], .control-group select {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        box-sizing: border-box;
-        font-size: 0.9em;
-        color: var(--text-color);
-    }
-    /* Dashboard */
-    #model-dashboard {
-        display: grid;
-        grid-template-columns: 2fr 1fr;
-        gap: 20px;
-        margin-top: 30px;
-    }
-    #chart-container {
-        background-color: var(--surface-color);
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-    }
-    #metrics-panel {
-        background-color: var(--surface-color);
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-        border-left: 4px solid var(--google-green);
-    }
-    #metrics-panel h3 { margin-top: 0; color: var(--google-green); font-weight: 500; font-size: 1.2em; }
-    .metric-item { margin-bottom: 10px; font-size: 0.95em; }
-    .metric-item strong { display: block; font-size: 1.1em; color: var(--text-color); }
-    /* Data Analytics Dashboard */
-    #data-analytics-dashboard {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin-top: 20px;
-    }
-    .dashboard-card {
-        background-color: var(--surface-color);
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-    }
-    .dashboard-card h3 {
-        margin-top: 0;
-        font-size: 1.2em;
-        color: var(--primary-blue);
-    }
-    /* Heatmap styles */
-    #transition-heatmap-content {
-        overflow-x: auto;
-        max-height: 350px;
-    }
-    #transition-heatmap-content table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.75em;
-        table-layout: fixed;
-    }
-    #transition-heatmap-content th, #transition-heatmap-content td {
-        border: 1px solid #eee;
-        padding: 5px;
-        text-align: center;
-        transition: background-color 0.3s;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        height: 30px;
-    }
-    #transition-heatmap-content th {
-        background-color: #f7f7f7;
-        font-weight: 500;
-    }
-    .heatmap-cell {
-        cursor: default;
-        color: white;
-        font-weight: 500;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        overflow: hidden;
-    }
-    /* Component Styles */
-    .data-source-card, #matrix-output {background-color: var(--surface-color); border-radius: 8px;
-        box-shadow: var(--elevation-low); padding: 20px; transition: box-shadow 0.3s; }
-    .data-source-tabs { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
-    .data-source-card {flex: 1 1 300px; text-align: center; cursor: pointer; }
-    .data-source-card:hover { box-shadow: var(--elevation-mid); }
-    button { background-color: var(--primary-blue); color: var(--surface-color); border: none; padding:
-        10px 20px; font-size: 14px; font-weight: 500; text-transform: capitalize; cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.3s, box-shadow 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    button:hover { background-color: #3B7DD1;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
-    button:disabled { background-color: #ccc; cursor: not-allowed; }
-    textarea { border: 1px solid var(--border-color); border-radius: 4px; padding: 12px; height: 120px;
-        margin-bottom: 20px; width: 100%; box-sizing: border-box;
-        font-family: 'Roboto', sans-serif; font-size:
-        1em; color: var(--text-color); background-color: var(--surface-color); }
-    .upload-container { border: 2px dashed var(--border-color); background-color: var(--surface-color);
-        border-radius: 8px; padding: 30px; text-align: center; margin-top: 20px;
-        transition: background-color 0.3s,
-        border-color 0.3s, box-shadow 0.3s; cursor: pointer; position: relative; }
-    .upload-container:hover { border-color: var(--primary-blue); background-color: #F8F9FA;
-        box-shadow: var(--elevation-low); }
-    .upload-container.drag-over { background-color: #E8F0FE; border-color: var(--primary-blue);
-        box-shadow: 0 0 0 3px rgba(26,115,232,0.2); }
-    .upload-container i.fa-file-import { font-size: 3em; color: var(--primary-blue); margin-bottom: 15px;
-        display: block; }
-    #file-analytics-card {margin-top: 20px; background-color: var(--surface-color); border-radius: 8px;
-        box-shadow: var(--elevation-low); padding: 20px; border-left: 4px solid var(--google-green); }
-    .progress-bar-container { width: 100%; background-color: #eee; border-radius: 4px; margin-top:
-        15px; overflow: hidden; display: none; align-items: center; height: 35px;
-        box-shadow: inset 0 1px 3px
-        rgba(0,0,0,0.1); position: relative; }
-    #lim-output { padding: 20px; border: 1px solid var(--border-color); background-color: #F1F3F4;
-        margin-top: 20px; color: var(--text-color); line-height: 1.6; border-radius: 8px; min-height: 100px;
-    }
-    progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary-blue) 0%, #4285F4
-        100%); width: 0%; text-align: center; line-height: 35px; color: white; font-size: 12px;
-        font-weight: 500;
-        transition: width 0.3s ease-out; border-radius: 4px 0 0 4px; white-space: nowrap; overflow: hidden;
-        padding: 0 10px; box-sizing: border-box;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-    .progress-bar-container button {position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
-        z-index: 2; background-color: var(--google-red); padding: 5px 10px; font-size: 0.8em;
-        box-shadow: 0 1px
-        2px rgba(0,0,0,0.2); margin-left: auto; }
-    
-    /* === NEW WORKER STATUS PANEL STYLES === */
-    .status-panel {
-        background-color: var(--surface-color);
-        border-radius: 8px;
-        box-shadow: var(--elevation-low);
-        padding: 15px;
-        display: flex;
-        align-items: flex-start;
-        gap: 15px;
-        margin-top: 20px;
-        border-left: 5px solid var(--border-color); /* Default: Idle/Unknown */
-        transition: all 0.3s ease-in-out;
-    }
-    .status-panel.idle {
-        border-left-color: var(--google-green);
-        background-color: #F6FFF6; /* Light Green for Ready */
-    }
-    .status-panel.checking {
-        border-left-color: var(--primary-blue);
-        background-color: #F0F5FF; /* Light Blue for Checking/Initializing */
-    }
-    .status-panel.running {
-        border-left-color: var(--primary-blue);
-        background-color: #F0F5FF; /* Light Blue for Running */
-    }
-    .status-panel.error {
-        border-left-color: var(--google-red);
-        background-color: #FFF6F6; /* Light Red for Error */
-    }
-
-    .status-icon {
-        font-size: 1.8em;
-        width: 30px;
-        text-align: center;
-        flex-shrink: 0;
-    }
-
-    .status-icon.idle i { color: var(--google-green); }
-    .status-icon.running i { color: var(--primary-blue); }
-    .status-icon.error i { color: var(--google-red); }
-
-    .status-content {
-        flex-grow: 1;
-    }
-
-    .status-header {
-        font-weight: 500;
-        margin-top: 0;
-        margin-bottom: 5px;
-        font-size: 1.1em;
-        color: var(--text-color);
-    }
-    .status-text {
-        font-size: 0.9em;
-        color: var(--secondary-text);
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    /* === END NEW STYLES (Old .training-status and @keyframes pulse REMOVED) === */
-
-    .aws-config-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background:
-        rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
-    .aws-config-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px
-        20px rgba(0,0,0,0.3); max-width: 500px; width: 90%; }
-    .aws-config-content h3 { margin-top: 0; color: var(--primary-blue); }
-    .aws-config-content input { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid
-        var(--border-color); border-radius: 4px; box-sizing: border-box;
-    }
-    .aws-config-content label { display: block; font-weight: 500; font-size: 0.9em; color:
-        var(--secondary-text); margin-top: 10px; }
-    #file-preview { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; margin-top: 20px;
-        padding-top: 15px; border-top: 1px dashed var(--border-color); }
-    .file-item { background-color: #F1F3F4; border: 1px solid #DADCE0; border-radius: 16px; padding:
-        6px 12px; font-size: 0.85em; white-space: nowrap; color: var(--secondary-text);
-        display: flex; align-items:
-        center; gap: 6px; transition: background-color 0.2s, box-shadow 0.2s; cursor: default; }
-    .file-item:hover { background-color: #E8F0FE; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .file-item i.fa-file-alt { color: var(--primary-blue); }
-    .file-item .remove-file { color: var(--secondary-text); cursor: pointer; font-size: 0.9em; margin-left: 5px;
-        transition: color 0.2s; }
-    .file-item .remove-file:hover { color: var(--google-red); }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LLM Toolkit — Worker + Checkpoint Demo</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:20px;background:#f7f9fb}
+    .card{background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.06);max-width:900px;margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #d0d7de;background:#1f7be1;color:#fff;cursor:pointer}
+    button.secondary{background:#6c757d}
+    button.warn{background:#d9534f}
+    #progressBar{height:20px;background:#e6eefc;border-radius:6px;overflow:hidden;margin-top:8px}
+    #progressFill{height:100%;width:0;background:linear-gradient(90deg,#2b8cff,#0b6cff);color:#fff;text-align:center;font-size:12px;line-height:20px}
+    pre{background:#0b1220;color:#bcd; padding:12px;border-radius:6px;overflow:auto;max-height:200px}
+    label{display:block;margin-top:8px;font-weight:600}
+    input[type="file"]{display:block;margin-top:8px}
+    .small{font-size:0.9em;color:#444}
+    .warntext{color:#b33}
+  </style>
 </head>
 <body>
-<div class="top-header">
-    <i class="fas fa-bars" style="margin-right: 20px; font-size: 1.2em;"></i>
-    <h1><i class="fas fa-brain"></i> DIY LLM Toolkit</h1>
-    <div class="top-header-search">
-        <i class="fas fa-search"></i>
-        Search the Knowledge Base...
+  <div class="card">
+    <h1>LLM Toolkit — Background Training (Worker) + Checkpoints</h1>
+
+    <div class="row">
+      <button id="startBtn">Start New Training</button>
+      <button id="resumeBtn" class="secondary">Resume from Checkpoint</button>
+      <button id="pauseBtn" class="secondary">Pause</button>
+      <button id="downloadBtn" class="secondary">Download Checkpoint</button>
+      <button id="clearBtn" class="warn">Delete Checkpoint</button>
     </div>
-    <i class="fas fa-question-circle" style="margin-left: auto; margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
-    <i class="fas fa-bell" style="margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
-    <div style="width: 30px; height: 30px; background-color: #A0C3FF; border-radius: 50%;"></div>
-</div>
-<div class="main-content-area">
-    <div class="side-nav">
-        <div class="nav-item"> <i class="fas fa-home"></i> Overview </div>
-        <div class="nav-item active"> <i class="fas fa-database"></i> Data & Tokenization </div>
-        <div class="nav-item"> <i class="fas fa-chart-line"></i> Analytics & Metrics </div>
-        <div class="nav-item"> <i class="fas fa-cogs"></i> Model Training </div>
-        <div class="nav-item"> <i class="fas fa-robot"></i> Text Generation </div>
+
+    <label>Task ID (auto-generated, you can set your own)</label>
+    <input id="taskIdInput" placeholder="optional: enter a UUID-ish id" style="padding:8px;width:100%;box-sizing:border-box">
+
+    <label>Epochs</label>
+    <input id="epochsInput" type="number" value="50" min="1" style="padding:8px;width:120px">
+
+    <label>Save interval (ms)</label>
+    <input id="saveIntervalInput" type="number" value="300000" min="1000" style="padding:8px;width:160px">
+    <div style="margin-top:12px" class="small">
+      The worker will post progress at least every 5s and checkpoint every save interval (default 300,000ms = 5min).
     </div>
-    <div class="content-wrapper">
-        <p style="font-size: 0.95em; margin-bottom: 25px;">A modular prototype for training lightweight LLMs, supporting Markov chain fallback and TensorFlow-based attention simulation.</p>
-        <div class="mode-toggle">
-            <div class="mode-label" id="current-mode-label">
-                Current Mode: <strong id="model-mode-name">Markov Chain (Fallback)</strong>
-                <br><span>(Switch to Transformer for vector-based generation)</span>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="model-mode-toggle" onchange="toggleModelMode(this.checked)">
-                <span class="slider"></span>
-            </label>
-        </div>
-        <section id="data-ingestion-section">
-            <h2>Data Ingestion & Tokenization</h2>
-            <div class="data-source-tabs">
-                <div class="data-source-card">
-                    <h3>Local Files</h3>
-                    <i class="fas fa-upload" style="color: var(--primary-blue); font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Drag, drop, or select multiple local files for instant processing.</p>
-                    <label class="upload-label" for="file-input">Select Local Files</label>
-                </div>
-                <div class="data-source-card" onclick="showAwsConfigModal()">
-                    <h3>AWS S3 Storage</h3>
-                    <i class="fab fa-aws" style="color: #FF9900; font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em; font-weight: 500;">Connect to an AWS S3 bucket to stream training data.</p>
-                    <button style="background-color: #FF9900;" onclick="event.stopPropagation(); showAwsConfigModal();">
-                        <i class="fas fa-link"></i> Connect S3 Bucket
-                    </button>
-                </div>
-                <div class="data-source-card">
-                    <h3>Sample Dataset</h3>
-                    <i class="fas fa-book" style="color: #9334E9; font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Load a sample text corpus for quick testing.</p>
-                    <button onclick="loadSampleData()" style="background-color: #9334E9;">
-                        <i class="fas fa-file-alt"></i> Load Sample Text
-                    </button>
-                </div>
-                <div class="data-source-card">
-                    <h3>Kaggle Dataset</h3>
-                    <i class="fas fa-cloud-download-alt" style="color: var(--google-green); font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Pull data directly from a public Kaggle dataset via API.</p>
-                    <button onclick="showAlert('Integration logic for Kaggle data pull goes here.')" style="background-color: var(--google-green);">
-                        <i class="fas fa-download"></i> Fetch from Kaggle
-                    </button>
-                </div>
-            </div>
-            <div class="upload-container" id="drop-zone">
-                <i class="fas fa-file-import"></i>
-                <p>Drop files here or paste below to train the model.</p>
-                <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
-            </div>
-            <div id="file-analytics-card">
-                <h3>Uploaded Files Overview</h3>
-                <div id="file-analytics-summary">0 Files Uploaded (0.0 MB)</div>
-                <div id="progress-container" class="progress-bar-container">
-                    <div id="progress-bar" class="progress-bar">0%</div>
-                    <button onclick="cancelStreaming()"><i class="fas fa-times"></i> Cancel</button>
-                </div>
-                <div id="file-preview"></div>
-                <div style="margin-top: 15px;">
-                    <button onclick="tokenizer.exportVocabulary()" style="background-color: #5F6368;"><i class="fas fa-download"></i> Export Vocab</button>
-                </div>
-            </div>
-            <textarea id="text-input" placeholder="... or paste your text corpus directly here."></textarea>
-            <div style="display: flex; gap: 15px; justify-content: flex-start; margin-bottom: 0;">
-                <button onclick="dataHandler.tokenizeAndBuildMatrix()"><i class="fas fa-list-ol"></i> Tokenize & Preprocess</button>
-                <button onclick="miniTransformer.trainOnText()" id="train-button" style="background-color: #3C769D;"><i class="fas fa-bolt"></i> Train Model</button>
-            </div>
-            
-            <div id="worker-status-panel" class="status-panel idle">
-                <div class="status-icon idle" id="worker-status-icon"><i class="fas fa-check-circle"></i></div>
-                <div class="status-content">
-                    <div class="status-header" id="worker-status-header">Worker Status & Summary</div>
-                    <div class="status-text" id="worker-status-text">Ready. Upload data or load a model to begin.</div>
-                </div>
-            </div>
-            </section>
-        <hr class="divider">
-        <section id="data-analytics-section" style="display: none;">
-            <h2>Data Analytics & Visualization</h2>
-            <p style="font-size: 0.9em; margin-bottom: 25px;">These charts update after running the "Tokenize & Preprocess" step.</p>
-            <div id="data-analytics-dashboard">
-                <div id="token-chart-container" class="dashboard-card">
-                    <h3><i class="fas fa-chart-bar"></i> Top 10 Token Frequency</h3>
-                    <canvas id="tokenChart"></canvas>
-                </div>
-                <div id="heatmap-container" class="dashboard-card">
-                    <h3><i class="fas fa-th-large"></i> Transition/Attention Heatmap</h3>
-                    <div id="transition-heatmap-content">
-                        <em>Run tokenization to view Markov transition probabilities.</em>
-                    </div>
-                </div>
-            </div>
-            <hr class="divider">
-        </section>
-        <section id="model-section">
-            <h2>Model Configuration & Execution</h2>
-            <div id="model-controls-panel">
-                <div class="control-group">
-                    <label for="max-tokens-input">Max Tokens (Inference)</label>
-                    <input type="number" id="max-tokens-input" value="50" min="10">
-                </div>
-                <div class="control-group">
-                    <label for="temperature-input">Temperature (Sampling)</label>
-                    <input type="number" id="temperature-input" value="0.7" step="0.1" min="0.1" max="2.0">
-                </div>
-                <div class="control-group">
-                    <label for="embedding-size-input">Embedding Dim (d_model)</label>
-                    <input type="number" id="embedding-size-input" value="128" min="16">
-                </div>
-                <div class="control-group">
-                    <label for="epochs-input">Epochs (Training)</label>
-                    <input type="number" id="epochs-input" value="20" min="1">
-                </div>
-                <div class="control-group">
-                    <label for="batch-size-input">Batch Size (Training)</label>
-                    <input type="number" id="batch-size-input" value="16" min="1">
-                </div>
-                <div class="control-group">
-                    <label for="learning-rate-input">Learning Rate</label>
-                    <input type="number" id="learning-rate-input" value="0.0005" step="0.0001" min="0.0001">
-                </div>
-            </div>
-            <div id="model-dashboard">
-                <div id="chart-container">
-                    <h3><i class="fas fa-chart-area"></i> Live Loss Curve</h3>
-                    <canvas id="lossChart"></canvas>
-                </div>
-                <div id="metrics-panel">
-                    <h3><i class="fas fa-tachometer-alt"></i> Model Metrics</h3>
-                    <div class="metric-item">Current Loss: <strong id="metric-loss">N/A</strong></div>
-                    <div class="metric-item">Epochs Run: <strong id="metric-epochs">0</strong></div>
-                    <div class="metric-item">Vocab Size: <strong id="metric-vocab-size">0</strong></div>
-                    <div class="metric-item">Inference Latency: <strong id="metric-latency">N/A</strong></div>
-                    <div class="metric-item">Memory Footprint: <strong id="metric-memory">0 MB</strong></div>
-                    <button onclick="miniTransformer.saveModel()" style="margin-top: 15px;"><i class="fas fa-save"></i> Save Model Weights</button>
-                    <button onclick="miniTransformer.loadModel()" 
-                        style="margin-top: 10px; background-color: #5F6368;"><i class="fas fa-file-upload"></i> Load Model Weights</button>
-                </div>
-            </div>
-        </section>
-        <hr class="divider">
-        <section id="generation-section">
-            <h2>Text Generation</h2>
-            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                <input type="text" id="prompt-input" placeholder="Enter your prompt word or sentence here..." style="flex-grow: 1; padding: 10px;
-                    border: 1px solid var(--border-color); border-radius: 4px;">
-                <button onclick="generateTextFromModel()"><i class="fas fa-magic"></i> Generate Text</button>
-            </div>
-            <div id="llm-output">
-                <em>Generated text will appear here. Start by tokenizing and training your model.</em>
-            </div>
-        </section>
+
+    <div style="margin-top:16px">
+      <div id="progressText" class="small">No task running.</div>
+      <div id="progressBar"><div id="progressFill">0%</div></div>
+      <div style="margin-top:8px" id="statusLog"><em>Worker logs will appear here.</em></div>
     </div>
-</div>
-<div id="custom-alert" style="position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
-    z-index: 1000;">
-    <div style="background: white; padding: 25px; border-radius: 8px; box-shadow: var(--elevation-mid); max-width: 400px;">
-        <h3 id="alert-title" style="margin-top: 0;
-        color: var(--primary-blue);">Alert</h3>
-        <p id="alert-message"></p>
-        <button onclick="document.getElementById('custom-alert').style.display='none'" style="float: right;">OK</button>
+
+    <hr style="margin:18px 0">
+
+    <div>
+      <strong>Checkpoint Storage</strong>
+      <div class="small" style="margin-top:8px">
+        The app uses <code>IndexedDB</code> to store checkpoints (<=50MB target). If the browser refuses to save,
+        you'll be prompted to download the checkpoint file.
+      </div>
+      <div style="margin-top:12px">
+        <button id="inspectBtn" class="secondary">Show Latest Checkpoint Info</button>
+      </div>
+      <pre id="inspectPre">No checkpoint inspected yet.</pre>
     </div>
-</div>
-<div id="aws-config-modal" class="aws-config-modal">
-    <div class="aws-config-content">
-        <h3><i class="fab fa-aws"></i> AWS S3 Configuration</h3>
-        <p style="font-size: 0.9em;
-        color: var(--secondary-text);">Enter your AWS credentials to connect to S3. Your credentials are stored locally and never sent to external servers.</p>
-        <label for="aws-region">AWS Region</label>
-        <input type="text" id="aws-region" placeholder="us-east-1" value="us-east-1">
-        <label for="aws-access-key">Access Key ID</label>
-        <input type="text" id="aws-access-key" placeholder="AKIAIOSFODNN7EXAMPLE">
-        <label for="aws-secret-key">Secret Access Key</label>
-        <input type="password" id="aws-secret-key" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
-        <label for="aws-bucket">Bucket Name</label>
-        <input type="text" id="aws-bucket" placeholder="my-training-data-bucket">
-        <label for="aws-prefix">Prefix/Folder (Optional)</label>
-        <input type="text" id="aws-prefix" placeholder="datasets/">
-        <div style="display: flex;
-        gap: 10px; margin-top: 20px; justify-content: flex-end;">
-            <button onclick="closeAwsConfigModal()" style="background-color: #5F6368;">Cancel</button>
-            <button onclick="connectAwsS3()" style="background-color: #FF9900;"><i class="fas fa-link"></i> Connect</button>
-        </div>
+
+    <hr style="margin:18px 0">
+
+    <div>
+      <strong>Error / Alerts</strong>
+      <div id="alertBox" class="warntext small"></div>
     </div>
-</div>
+  </div>
+
 <script>
-// Configuration
-const CONFIG = {
-    modelMode: 'MARKOV',
-    maxTokens: 50, // Reduced for better output
-    temperature: 0.7, // Lower temperature for more focused generation
-    embeddingDim: 128, // Increased for better representation
-    numHeads: 4,
-    ffnDim: 256, // Increased FFN dimension
-    train: {
-        epochs: 20, // More epochs for better learning
-        batchSize: 16, // Smaller batch for better gradients
-        learningRate: 0.0005 // Lower learning rate for stability
+/*
+Main thread controller for training-worker.js
+ - Creates worker
+ - Sends start/resume/pause/save/load commands
+ - Displays progress
+ - Handles QuotaExceededError and offers download of checkpoint
+ - Implements worker.onerror to avoid UI freeze
+*/
+
+const DB_NAME = 'llm_worker_checkpoints_v1';
+const STORE_NAME = 'checkpoints';
+
+let worker = null;
+let currentTaskId = '';
+let lastCheckpointMeta = null;
+
+const startBtn = document.getElementById('startBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const clearBtn = document.getElementById('clearBtn');
+const inspectBtn = document.getElementById('inspectBtn');
+
+const progressFill = document.getElementById('progressFill');
+const progressText = document.getElementById('progressText');
+const statusLog = document.getElementById('statusLog');
+const alertBox = document.getElementById('alertBox');
+const inspectPre = document.getElementById('inspectPre');
+
+function logStatus(msg){
+  const t = new Date().toLocaleTimeString();
+  statusLog.innerHTML = `<div>[${t}] ${escapeHtml(msg)}</div>` + statusLog.innerHTML;
+}
+function echoAlert(msg){
+  alertBox.textContent = msg;
+  setTimeout(()=>{ if(alertBox.textContent===msg) alertBox.textContent=''; }, 20000);
+}
+function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function createWorker(){
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
+  worker = new Worker('training-worker.js');
+  worker.onmessage = handleWorkerMessage;
+  worker.onerror = (ev) => {
+    console.error('Worker error', ev);
+    logStatus('Worker error: ' + (ev.message || 'unknown'));
+    echoAlert('Worker crashed — see console for details.');
+  };
+  logStatus('Worker created');
+}
+
+function handleWorkerMessage(ev){
+  const msg = ev.data;
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'progress':
+      updateProgress(msg);
+      break;
+    case 'log':
+      logStatus(msg.text);
+      break;
+    case 'checkpoint-saved':
+      lastCheckpointMeta = msg.meta;
+      logStatus(`Checkpoint saved (step ${msg.meta.stepNumber}, ${new Date(msg.meta.timestamp).toLocaleString()})`);
+      break;
+    case 'checkpoint-error':
+      if (msg.error && msg.error.name === 'QuotaExceededError') {
+        // Worker couldn't save — pause worker and offer download
+        logStatus('Checkpoint failed: quota exceeded.');
+        echoAlert('Storage limit reached. Pausing worker so you can download the checkpoint.');
+        pauseWorker().then(()=>{/*paused*/});
+      } else {
+        logStatus('Checkpoint error: ' + (msg.error && msg.error.message));
+      }
+      break;
+    case 'ready':
+      logStatus('Worker ready');
+      break;
+    case 'resumed':
+      logStatus('Resumed from checkpoint (step ' + msg.step + ')');
+      break;
+    case 'saved-file':
+      // Received checkpoint Blob as downloadable message (rare, normally main will download from IndexedDB)
+      downloadBlob(msg.blob, msg.filename || 'checkpoint.bin');
+      break;
+    default:
+      console.warn('Unknown worker msg', msg);
+  }
+}
+
+function updateProgress({percentage, stepNumber, epochs, status}){
+  const pct = Math.min(100, Math.max(0, Math.round(percentage)));
+  progressFill.style.width = pct + '%';
+  progressFill.textContent = pct + '%';
+  progressText.textContent = `Step ${stepNumber || 0} — ${status || ''} — Epochs target: ${epochs || '?'}`
+}
+
+async function startNewWorker(){
+  createWorker();
+  const taskIdInput = document.getElementById('taskIdInput').value.trim();
+  currentTaskId = taskIdInput || ('task-' + Date.now().toString(36));
+  const epochs = Number(document.getElementById('epochsInput').value) || 50;
+  const saveInterval = Number(document.getElementById('saveIntervalInput').value) || 300000;
+
+  worker.postMessage({type:'start-new', payload:{
+    taskId: currentTaskId,
+    config: {
+      epochs,
+      saveInterval
     }
-};
-const SEQUENCE_LENGTH = 10;
-const UNK_TOKEN_ID = 0;
-let lossChart = null;
-let tokenChart = null;
-let currentStreamController = null;
+  }});
+  logStatus('Sent start-new to worker (taskId=' + currentTaskId + ')');
+}
 
-// === NEW WORKER STATUS FUNCTION ===
-function setWorkerStatus(state, process, description) {
-    const panel = document.getElementById('worker-status-panel');
-    const header = document.getElementById('worker-status-header');
-    const text = document.getElementById('worker-status-text');
-    const iconDiv = document.getElementById('worker-status-icon');
+async function resumeFromCheckpoint(){
+  // Ask worker to resume; worker will load from IndexedDB itself if we send 'resume' and provide taskId
+  createWorker();
+  const taskIdInput = document.getElementById('taskIdInput').value.trim();
+  currentTaskId = taskIdInput || null;
+  worker.postMessage({type:'resume', payload:{taskId: currentTaskId}});
+  logStatus('Sent resume to worker (taskId=' + (currentTaskId||'any') + ')');
+}
 
-    // Reset classes
-    panel.className = `status-panel ${state}`;
-    iconDiv.className = `status-icon ${state}`;
+async function pauseWorker(){
+  if (!worker) return;
+  worker.postMessage({type:'pause'});
+  logStatus('Sent pause');
+}
 
-    // Update content and icon
-    header.textContent = process;
-    text.textContent = description;
-
-    let iconClass = '';
-    let spin = false;
-
-    switch (state) {
-        case 'idle':
-            iconClass = 'fas fa-check-circle';
-            break;
-        case 'checking':
-            iconClass = 'fas fa-search';
-            spin = true;
-            break;
-        case 'running':
-            iconClass = 'fas fa-cogs';
-            spin = true;
-            break;
-        case 'error':
-            iconClass = 'fas fa-exclamation-triangle';
-            break;
-        default:
-            iconClass = 'fas fa-question-circle';
-            break;
+async function downloadLatestCheckpoint(){
+  // We'll open IndexedDB and download the Blob for the latest checkpoint for currentTaskId (or newest)
+  try{
+    const meta = await inspectLatestCheckpoint(currentTaskId);
+    if (!meta) {
+      echoAlert('No checkpoint found to download.');
+      return;
     }
-
-    // Apply icon and spinning state
-    iconDiv.innerHTML = `<i class="${iconClass} ${spin ? 'fa-spin' : ''}"></i>`;
-}
-// === END NEW WORKER STATUS FUNCTION ===
-
-// Utility Functions
-function showAlert(message, title = 'Notification') {
-    document.getElementById('alert-title').textContent = title;
-    document.getElementById('alert-message').innerHTML = message;
-    document.getElementById('custom-alert').style.display = 'flex';
-}
-
-function initializeLossChart() {
-    const ctx = document.getElementById('lossChart').getContext('2d');
-    if (lossChart) lossChart.destroy();
-    lossChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Training Loss',
-                data: [],
-                borderColor: 'var(--primary-blue)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: { title: { display: true, text: 'Epoch' } },
-                y: { title: { display: true, text: 'Loss' }, beginAtZero: true }
-            }
-        }
-    });
+    const {taskId, timestamp} = meta;
+    const content = await readCheckpointBlob(taskId);
+    if (!content) {
+      echoAlert('Could not load checkpoint data for download.');
+      return;
+    }
+    downloadBlob(content, `checkpoint-${taskId || 'latest'}-${timestamp}.bin`);
+  } catch(err){
+    console.error(err);
+    echoAlert('Download failed: ' + (err.message||err));
+  }
 }
 
-function updateLossChart(epoch, loss) {
-    if (!lossChart) initializeLossChart();
-    if (lossChart.data.labels.indexOf(epoch) === -1) {
-        lossChart.data.labels.push(epoch);
-        lossChart.data.datasets[0].data.push(loss);
-        lossChart.update();
+// IndexedDB helpers (main thread)
+function openDb(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)){
+        db.createObjectStore(STORE_NAME, {keyPath:'taskId'});
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IDB open failed'));
+  });
+}
+
+async function inspectLatestCheckpoint(taskId){
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    if (taskId){
+      const r = store.get(taskId);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => reject(r.error);
     } else {
-        // Update existing point if needed (e.g., if epoch includes batch updates)
+      // iterate to find newest by timestamp
+      const cur = store.openCursor();
+      let best = null;
+      cur.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(best); return; }
+        const rec = cursor.value;
+        if (!best || (rec.timestamp || 0) > (best.timestamp || 0)) best = rec;
+        cursor.continue();
+      }
+      cur.onerror = () => reject(cur.error);
     }
+  });
 }
 
-function initializeTokenChart() {
-    const ctx = document.getElementById('tokenChart').getContext('2d');
-    if (tokenChart) tokenChart.destroy();
-    tokenChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Token Count',
-                data: [],
-                backgroundColor: 'rgba(15, 157, 88, 0.6)',
-                borderColor: 'rgb(15, 157, 88)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            indexAxis: 'y',
-            scales: {
-                x: { beginAtZero: true, title: { display: true, text: 'Frequency' } },
-                y: { ticks: { autoSkip: false } }
-            }
-        }
-    });
-}
-// State Management
-const state = new Proxy({
-    mode: CONFIG.modelMode,
-    vocabSize: 0,
-    currentLoss: 'N/A',
-    epochsRun: 0,
-    latency: 'N/A',
-    memory: '0 MB'
-}, {
-    set(target, key, value) {
-        const result = Reflect.set(target, key, value);
-        // UI updates based on state changes
-        switch (key) {
-            case 'mode':
-                document.getElementById('model-mode-name').textContent = value === 'MARKOV' ?
-                    'Markov Chain (Fallback)' : 'MiniTransformer (TF.js)';
-                document.getElementById('current-mode-label').style.borderLeftColor = value === 'MARKOV' ? '#ccc' : 'var(--primary-blue)';
-                document.getElementById('llm-output').innerHTML = `<em>Switched to ${value} mode. Re-run generation.</em>`;
-                break;
-            case 'vocabSize':
-                document.getElementById('metric-vocab-size').textContent = value.toLocaleString();
-                break;
-            case 'currentLoss':
-                document.getElementById('metric-loss').textContent = typeof value === 'number' ? value.toFixed(4) : value;
-                break;
-            case 'epochsRun':
-                document.getElementById('metric-epochs').textContent = value.toLocaleString();
-                break;
-            case 'latency':
-                document.getElementById('metric-latency').textContent = value;
-                break;
-            case 'memory':
-                document.getElementById('metric-memory').textContent = value;
-                break;
-        }
-        return result;
-    }
-});
-
-// UI Controls
-function toggleModelMode(isChecked) {
-    state.mode = isChecked ? 'TRANSFORMER' : 'MARKOV';
-    document.getElementById('model-mode-toggle').checked = isChecked;
-}
-document.getElementById('max-tokens-input').addEventListener('input', (e) => CONFIG.maxTokens = parseInt(e.target.value));
-document.getElementById('temperature-input').addEventListener('input', (e) => CONFIG.temperature = parseFloat(e.target.value));
-document.getElementById('embedding-size-input').addEventListener('input', (e) => CONFIG.embeddingDim = parseInt(e.target.value));
-document.getElementById('epochs-input').addEventListener('input', (e) => CONFIG.train.epochs = parseInt(e.target.value));
-document.getElementById('batch-size-input').addEventListener('input', (e) => CONFIG.train.batchSize = parseInt(e.target.value));
-document.getElementById('learning-rate-input').addEventListener('input', (e) => CONFIG.train.learningRate = parseFloat(e.target.value));
-
-// Tokenizer class
-class Tokenizer {
-    constructor() {
-        this.vocab = {};
-        this.idToToken = {};
-        this.tokenCounts = {};
-        this.UNK_TOKEN = '[UNK]';
-    }
-    cleanText(text) {
-        // Lowercase, remove punctuation (except essential ones like periods/commas if they are meant to be tokens)
-        // Here, we'll keep it simple for word-level tokenization.
-        return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    }
-    train(corpus) {
-        this.vocab = {};
-        this.idToToken = { 0: this.UNK_TOKEN }; // Reserve ID 0 for UNK
-        this.tokenCounts = {};
-        let nextID = 1;
-
-        const cleanedText = this.cleanText(corpus);
-        const words = cleanedText.split(/\s+/).filter(w => w.length > 0);
-
-        words.forEach(word => {
-            this.tokenCounts[word] = (this.tokenCounts[word] || 0) + 1;
-            if (!(word in this.vocab)) {
-                this.vocab[word] = nextID;
-                this.idToToken[nextID] = word;
-                nextID++;
-            }
-        });
-
-        state.vocabSize = nextID; // Actual size is nextID, as it starts counting from 1
-        showAlert(`Tokenizer trained. Vocab size: ${state.vocabSize} (plus 1 reserved ID for padding)`, 'Tokenization Complete');
-    }
-    encode(text) {
-        if (state.vocabSize === 0) return [];
-        const cleanedText = this.cleanText(text);
-        const words = cleanedText.split(/\s+/).filter(w => w.length > 0);
-        return words.map(word => this.vocab[word] || UNK_TOKEN_ID);
-    }
-    decode(ids) {
-        return ids.map(id => this.idToToken[id] || this.UNK_TOKEN).join(' ');
-    }
-    getTopTokenFrequencies(n = 10) {
-        const sortedTokens = Object.entries(this.tokenCounts)
-            .sort(([, countA], [, countB]) => countB - countA)
-            .slice(0, n);
-        return {
-            labels: sortedTokens.map(([token]) => token),
-            data: sortedTokens.map(([, count]) => count)
-        };
-    }
-    exportVocabulary() {
-        const vocabText = JSON.stringify({
-            vocab: this.vocab,
-            idToToken: this.idToToken,
-            tokenCounts: this.tokenCounts
-        }, null, 2);
-        // ... (download logic omitted for brevity)
-        showAlert(`Vocabulary (size ${state.vocabSize}) JSON logged to console. Download functionality goes here.`, 'Export Ready');
-        console.log(vocabText);
-    }
+async function readCheckpointBlob(taskId){
+  const rec = await inspectLatestCheckpoint(taskId);
+  if (!rec) return null;
+  // modelWeights stored as Blob in rec.modelWeights
+  return rec.modelWeights || null;
 }
 
-// Data Handler Class (manages file upload, tokenization, and Markov matrix)
-class DataHandler {
-    constructor(tokenizerInstance) {
-        this.tokenizer = tokenizerInstance;
-        this.uploadedFiles = [];
-        this.corpusText = "";
-        this.tokenIDs = [];
-        this.transitionMatrix = null; // For Markov model
-        this.totalSizeMB = 0;
-        this.setupListeners();
-        initializeTokenChart();
-    }
-
-    setupListeners() {
-        document.getElementById('file-input').addEventListener('change', (e) => { this.handleFiles(e.target.files); });
-        document.getElementById('text-input').addEventListener('input', (e) => { this.corpusText = e.target.value; });
-        // ... (drag/drop listeners omitted for brevity)
-    }
-
-    // ... (handleFiles, addFileToPreview, updateSummary, cancelStreaming logic omitted for brevity)
-
-    tokenizeAndBuildMatrix() {
-        const corpus = document.getElementById('text-input').value.trim() || this.corpusText.trim();
-        if (!corpus) {
-            showAlert('Please provide a text corpus (paste text, upload files, or stream from S3) before tokenization.', 'Input Required');
-            return;
-        }
-
-        this.tokenizer.train(corpus);
-        this.tokenIDs = this.tokenizer.encode(corpus);
-
-        if (state.mode === 'MARKOV') {
-            this.buildMarkovTransitionMatrix(this.tokenIDs);
-        } else {
-            this.transitionMatrix = null;
-        }
-
-        this.updateTokenChart();
-        // this.updateHeatmap(); // (Assuming this function uses transitionMatrix)
-    }
-
-    buildMarkovTransitionMatrix(tokenIDs) {
-        // ... (Markov matrix construction logic omitted for brevity)
-        // Set transitionMatrix = matrix;
-        this.transitionMatrix = [[]]; // Placeholder
-    }
-
-    updateTokenChart() {
-        const { labels, data } = this.tokenizer.getTopTokenFrequencies(10);
-        tokenChart.data.labels = labels;
-        tokenChart.data.datasets[0].data = data;
-        tokenChart.update();
-    }
-
-    // ... (updateHeatmap logic omitted for brevity)
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
 }
 
-// MiniTransformer Class (Worker Communication)
-class MiniTransformer {
-    constructor() {
-        this.worker = null;
-        this.model = null; // In-memory model for generation (if needed)
-        this.taskId = 'llm-training-' + Date.now(); // Unique ID for IndexedDB checkpoint
-        this.initializeWorker();
+async function deleteCheckpoint(taskId){
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    if (taskId){
+      const r = store.delete(taskId);
+      r.onsuccess = ()=>resolve(true);
+      r.onerror = ()=>reject(r.error);
+    } else {
+      // delete all
+      const c = store.clear();
+      c.onsuccess=()=>resolve(true);
+      c.onerror=()=>reject(c.error);
     }
-
-    initializeWorker() {
-        if (this.worker) return;
-
-        // 1. Worker Setup
-        try {
-            this.worker = new Worker('training-worker.js'); // Assuming co-located file
-            this.worker.onmessage = (event) => this.handleWorkerMessage(event);
-            this.worker.onerror = (error) => this.handleWorkerError(error);
-            
-            // Set initial UI status
-            setWorkerStatus('checking', 'Worker Initializing', 'Checking local storage for existing model checkpoint...');
-            
-            // 2. Initial check for saved model weights
-            this.checkCheckpoint();
-
-        } catch (e) {
-            // New error handler for worker creation failure (e.g., file not found)
-            this.handleWorkerError({ message: `Failed to create Web Worker. Check that 'training-worker.js' file path is correct.` });
-        }
-    }
-
-    checkCheckpoint() {
-        if (!this.worker) return;
-        this.worker.postMessage({ command: 'CHECK_CHECKPOINT', taskId: this.taskId });
-    }
-
-    trainOnText() {
-        if (state.mode === 'MARKOV') {
-            showAlert('Cannot train Transformer model in Markov Chain Mode.', 'Mode Mismatch');
-            return;
-        }
-
-        const dataIDs = dataHandler.tokenIDs;
-        if (!dataIDs || dataIDs.length < SEQUENCE_LENGTH * 2) {
-            showAlert('Tokenized data is too small for training. Need at least 2 full sequences.', 'Input Required');
-            return;
-        }
-        
-        // === FIX: Show RUNNING status immediately ===
-        setWorkerStatus('running', 'Training Model', 'Starting data transfer and model initialization...');
-        
-        // Prepare data for the worker (transferable objects for performance)
-        const transferableData = new Int32Array(dataIDs);
-
-        // Send START command and data
-        this.worker.postMessage({
-            command: 'START',
-            taskId: this.taskId,
-            config: CONFIG,
-            dataIDs: transferableData.buffer, // Transfer the buffer
-            vocabState: {
-                vocab: Array.from(tokenizer.vocab.entries()),
-                idToToken: Array.from(tokenizer.idToToken.entries())
-            }
-        }, [transferableData.buffer]); // Transfer list
-    }
-
-    handleWorkerMessage(event) {
-        const data = event.data;
-
-        switch (data.command) {
-            case 'CHECK_CHECKPOINT':
-                if (data.exists) {
-                    // Update state variables (loss, epochs)
-                    state.epochsRun = data.epochs;
-                    state.currentLoss = data.loss;
-                    // Update UI status
-                    setWorkerStatus('idle', 'Checkpoint Found', `Loaded state for ${data.epochs} epochs (Loss: ${data.loss.toFixed(4)}). Ready to resume or start new job.`);
-                } else {
-                    // No checkpoint found
-                    setWorkerStatus('idle', 'Worker Ready', 'No checkpoint found. Ready to begin new training job.');
-                }
-                break;
-            case 'PROGRESS':
-                // === FIX: Update UI based on worker progress (Epochs stuck fix) ===
-                state.currentLoss = data.loss;
-                state.epochsRun = data.epoch;
-
-                const progressText = `Epoch ${data.epoch}/${CONFIG.train.epochs} | Batch: ${data.batch} | Loss: ${data.loss.toFixed(4)}`;
-                setWorkerStatus('running', 'Training In Progress', progressText);
-
-                // Update loss chart (assuming updateLossChart is defined)
-                updateLossChart(data.epoch, data.loss);
-
-                break;
-            case 'COMPLETE':
-                // Training finished successfully
-                setWorkerStatus('idle', 'Training Complete', `Successfully trained model for ${CONFIG.train.epochs} epochs. Final Loss: ${state.currentLoss.toFixed(4)}.`);
-                showAlert('Training complete! The model is now ready for text generation.', 'Success');
-                break;
-            case 'ERROR':
-                // Catch all other worker-side errors
-                this.handleWorkerError({ message: data.message || 'An unknown error occurred in the worker thread.' });
-                break;
-            case 'QUOTA_ERROR':
-                // Specific error for IndexedDB storage limit
-                setWorkerStatus('error', 'Storage Quota Error', `Could not save checkpoint: ${data.message}. Training stopped.`);
-                showAlert(`Storage Quota Error: ${data.message}. Training stopped.`, 'Error');
-                break;
-            case 'VOCAB_LOADED':
-                // Logic to set vocabulary from loaded checkpoint
-                break;
-        }
-    }
-
-    handleWorkerError(error) {
-        console.error('Worker Error:', error);
-        
-        // === FIX: Show ERROR status immediately upon any worker failure ===
-        const errorMessage = error.message || 'Worker thread crashed or could not be created.';
-        setWorkerStatus('error', 'Worker Thread Error', `A fatal error occurred: ${errorMessage}. Check console (F12) for file path or memory issues.`);
-
-        showAlert(`FATAL WORKER ERROR: ${errorMessage}`, 'Critical Error');
-    }
-
-    saveModel() {
-        // ... (Model saving logic)
-        showAlert('Model saving logic goes here.', 'Not Implemented');
-    }
-
-    loadModel() {
-        // ... (Model loading logic)
-        showAlert('Model loading logic goes here.', 'Not Implemented');
-    }
+  });
 }
 
-// Initialization
-const tokenizer = new Tokenizer();
-const dataHandler = new DataHandler(tokenizer);
-const miniTransformer = new MiniTransformer(); // This calls initializeWorker() and checks checkpoint
+// UI wiring
+startBtn.onclick = ()=>{ startNewWorker(); }
+resumeBtn.onclick = ()=>{ resumeFromCheckpoint(); }
+pauseBtn.onclick = ()=>{ pauseWorker(); }
+downloadBtn.onclick = ()=>{ downloadLatestCheckpoint(); }
+clearBtn.onclick = async ()=> {
+  const taskIdInput = document.getElementById('taskIdInput').value.trim();
+  const id = taskIdInput || null;
+  if (!confirm('Delete checkpoint for ' + (id||'ALL') + '?')) return;
+  await deleteCheckpoint(id);
+  inspectPre.textContent = 'Deleted checkpoint(s).';
+  logStatus('Deleted checkpoint(s).');
+}
+inspectBtn.onclick = async ()=>{
+  try{
+    const taskIdInput = document.getElementById('taskIdInput').value.trim();
+    const rec = await inspectLatestCheckpoint(taskIdInput || null);
+    if (!rec) {
+      inspectPre.textContent = 'No checkpoint found.';
+      return;
+    }
+    const summary = {
+      taskId: rec.taskId,
+      timestamp: new Date(rec.timestamp).toLocaleString(),
+      stepNumber: rec.stepNumber,
+      taskConfig: rec.taskConfig,
+      modelWeightsBytes: (rec.modelWeights && rec.modelWeights.size) ? rec.modelWeights.size : 'n/a'
+    };
+    inspectPre.textContent = JSON.stringify(summary, null, 2);
+  }catch(err){
+    inspectPre.textContent = 'Inspect failed: ' + (err.message||err);
+  }
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Set initial toggle state
-    document.getElementById('model-mode-toggle').checked = (state.mode === 'TRANSFORMER');
-    // Initialize charts
-    initializeLossChart();
-    // The miniTransformer constructor already handles the initial worker status check.
-});
+// On page load, create worker (but idle)
+createWorker();
+logStatus('Main thread ready.');
 
-// ... (Rest of the AWS functions and generateTextFromModel function)
+// Try to show if a checkpoint exists at load
+(async ()=>{
+  const recent = await inspectLatestCheckpoint(null);
+  if (recent) {
+    logStatus('Found existing checkpoint for taskId=' + recent.taskId + ' (step ' + recent.stepNumber + ')');
+    inspectPre.textContent = JSON.stringify({
+      taskId: recent.taskId,
+      stepNumber: recent.stepNumber,
+      timestamp: new Date(recent.timestamp).toLocaleString(),
+      modelWeightsBytes: (recent.modelWeights && recent.modelWeights.size) ? recent.modelWeights.size : 'n/a'
+    }, null, 2);
+  } else {
+    inspectPre.textContent = 'No checkpoint present in IndexedDB.';
+  }
+})();
 
 </script>
 </body>
 </html>
+
