@@ -3,359 +3,623 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LLM Toolkit — Worker + Checkpoint Demo</title>
+  <title>DIY LLM Toolkit — Full UI + Worker Persistence</title>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:20px;background:#f7f9fb}
-    .card{background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.06);max-width:900px;margin:auto}
-    h1{margin:0 0 12px}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    button{padding:8px 12px;border-radius:6px;border:1px solid #d0d7de;background:#1f7be1;color:#fff;cursor:pointer}
-    button.secondary{background:#6c757d}
-    button.warn{background:#d9534f}
-    #progressBar{height:20px;background:#e6eefc;border-radius:6px;overflow:hidden;margin-top:8px}
-    #progressFill{height:100%;width:0;background:linear-gradient(90deg,#2b8cff,#0b6cff);color:#fff;text-align:center;font-size:12px;line-height:20px}
-    pre{background:#0b1220;color:#bcd; padding:12px;border-radius:6px;overflow:auto;max-height:200px}
-    label{display:block;margin-top:8px;font-weight:600}
-    input[type="file"]{display:block;margin-top:8px}
-    .small{font-size:0.9em;color:#444}
-    .warntext{color:#b33}
+    /* Visual layout preserved: clean card UI */
+    :root{
+      --accent: #1f7be1;
+      --muted: #6b7280;
+      --bg: #f6f8fb;
+      --card: #fff;
+      --danger: #d9534f;
+      --radius: 10px;
+      --shadow: 0 6px 20px rgba(16,24,40,0.06);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:#0f172a}
+    .container{max-width:1100px;margin:28px auto;padding:18px}
+    .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:18px}
+    h1{margin:0 0 8px;font-size:20px}
+    .muted{color:var(--muted);font-size:13px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .col{flex:1}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid #dbeafe}
+    button.warn{background:var(--danger);color:white}
+    .small{font-size:13px;color:var(--muted)}
+    label{display:block;font-weight:600;margin-top:10px}
+    input[type="text"], input[type="number"], textarea, select{
+      width:100%;padding:10px;border-radius:8px;border:1px solid #e6edf3;font-size:14px;box-sizing:border-box;
+    }
+    textarea{min-height:140px;resize:vertical}
+    #progressBar{height:18px;background:#eef3ff;border-radius:8px;overflow:hidden;margin-top:8px}
+    #progressFill{height:100%;width:0;background:linear-gradient(90deg,#2b8cff,#0b6cff);text-align:center;color:white;font-size:12px;line-height:18px}
+    pre{background:#0b1220;color:#bcd;padding:12px;border-radius:8px;overflow:auto;max-height:240px}
+    .flex-between{display:flex;justify-content:space-between;align-items:center}
+    .modeToggle{display:flex;gap:8px}
+    .chip{padding:8px 12px;border-radius:999px;border:1px solid #e6eefc;background:#fff;cursor:pointer}
+    .chip.active{background:linear-gradient(90deg,#2b8cff,#0b6cff);color:#fff;border:none}
+    .settings{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media (max-width:800px){ .settings{grid-template-columns:1fr} }
+    .warntext{color:var(--danger);font-weight:600}
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>LLM Toolkit — Background Training (Worker) + Checkpoints</h1>
-
-    <div class="row">
-      <button id="startBtn">Start New Training</button>
-      <button id="resumeBtn" class="secondary">Resume from Checkpoint</button>
-      <button id="pauseBtn" class="secondary">Pause</button>
-      <button id="downloadBtn" class="secondary">Download Checkpoint</button>
-      <button id="clearBtn" class="warn">Delete Checkpoint</button>
-    </div>
-
-    <label>Task ID (auto-generated, you can set your own)</label>
-    <input id="taskIdInput" placeholder="optional: enter a UUID-ish id" style="padding:8px;width:100%;box-sizing:border-box">
-
-    <label>Epochs</label>
-    <input id="epochsInput" type="number" value="50" min="1" style="padding:8px;width:120px">
-
-    <label>Save interval (ms)</label>
-    <input id="saveIntervalInput" type="number" value="300000" min="1000" style="padding:8px;width:160px">
-    <div style="margin-top:12px" class="small">
-      The worker will post progress at least every 5s and checkpoint every save interval (default 300,000ms = 5min).
-    </div>
-
-    <div style="margin-top:16px">
-      <div id="progressText" class="small">No task running.</div>
-      <div id="progressBar"><div id="progressFill">0%</div></div>
-      <div style="margin-top:8px" id="statusLog"><em>Worker logs will appear here.</em></div>
-    </div>
-
-    <hr style="margin:18px 0">
-
-    <div>
-      <strong>Checkpoint Storage</strong>
-      <div class="small" style="margin-top:8px">
-        The app uses <code>IndexedDB</code> to store checkpoints (<=50MB target). If the browser refuses to save,
-        you'll be prompted to download the checkpoint file.
+  <div class="container">
+    <div class="card">
+      <div class="flex-between">
+        <div>
+          <h1>DIY LLM Toolkit</h1>
+          <div class="muted">Local (TF.js) • Worker (Persistent) • Cloud (UI-only)</div>
+        </div>
+        <div>
+          <div class="modeToggle" role="tablist" aria-label="Mode toggle">
+            <div id="modeLocal" class="chip active" role="tab">Local (TF.js)</div>
+            <div id="modeWorker" class="chip" role="tab">Worker (Persistent)</div>
+            <div id="modeCloud" class="chip" role="tab">Cloud (SageMaker)</div>
+          </div>
+        </div>
       </div>
-      <div style="margin-top:12px">
-        <button id="inspectBtn" class="secondary">Show Latest Checkpoint Info</button>
+
+      <hr style="margin:12px 0">
+
+      <div class="row">
+        <div class="col">
+          <label>Input / Training Text</label>
+          <textarea id="inputText" placeholder="Paste training text or use Load Sample...">When Jesus had come into the coasts of Caesarea Philippi, he asked his disciples, "Who do men say that I am?"</textarea>
+
+          <div style="margin-top:8px" class="controls">
+            <button id="loadSampleBtn">Load Sample Text</button>
+            <button id="tokenizeBtn" class="ghost">Tokenize & Preprocess</button>
+            <button id="trainBtn">Train Model</button>
+            <button id="stopBtn" class="ghost">Stop</button>
+            <button id="saveNowBtn" class="ghost">Save Now</button>
+          </div>
+
+          <label>Model / Task ID</label>
+          <input id="taskIdInput" placeholder="optional: set a task id (defaults to auto)" type="text">
+
+          <div class="settings">
+            <div>
+              <label>Epochs</label>
+              <input id="epochs" type="number" value="50" min="1">
+            </div>
+            <div>
+              <label>Save Interval (ms)</label>
+              <input id="saveInterval" type="number" value="300000" min="1000">
+            </div>
+            <div>
+              <label>Learning Rate</label>
+              <input id="lr" type="text" value="0.001">
+            </div>
+            <div>
+              <label>Batch Size</label>
+              <input id="batchSize" type="number" value="8" min="1">
+            </div>
+          </div>
+
+        </div>
+
+        <div style="width:380px;margin-left:14px">
+          <div class="card" style="padding:12px">
+            <div class="flex-between">
+              <div><strong>Training Progress</strong></div>
+              <div class="small" id="statusSmall">idle</div>
+            </div>
+            <div id="progressBar"><div id="progressFill">0%</div></div>
+            <div style="margin-top:8px" id="progressLog" class="small">No activity yet.</div>
+            <canvas id="lossChart" style="width:100%;height:200px;margin-top:10px"></canvas>
+          </div>
+
+          <div class="card" style="padding:12px;margin-top:12px">
+            <strong>Checkpoint Controls</strong>
+            <div class="small" style="margin-top:8px">Checkpoint saved to your browser (IndexedDB). Resume across sessions.</div>
+            <div style="margin-top:10px" class="controls">
+              <button id="resumeBtn" class="ghost">Resume</button>
+              <button id="inspectBtn" class="ghost">Inspect Checkpoint</button>
+              <button id="downloadBtn" class="ghost">Download</button>
+              <button id="clearBtn" class="warn">Delete</button>
+            </div>
+            <pre id="inspectPre">No checkpoint inspected.</pre>
+            <div id="alertBox" class="warntext" style="margin-top:8px"></div>
+          </div>
+        </div>
       </div>
-      <pre id="inspectPre">No checkpoint inspected yet.</pre>
     </div>
 
-    <hr style="margin:18px 0">
-
-    <div>
-      <strong>Error / Alerts</strong>
-      <div id="alertBox" class="warntext small"></div>
-    </div>
+    <footer>Drop this `index.html` and the file `training-worker.js` in the root of a public GitHub repo and enable Pages → main / root.</footer>
   </div>
 
 <script>
-/*
-Main thread controller for training-worker.js
- - Creates worker
- - Sends start/resume/pause/save/load commands
- - Displays progress
- - Handles QuotaExceededError and offers download of checkpoint
- - Implements worker.onerror to avoid UI freeze
-*/
-
-const DB_NAME = 'llm_worker_checkpoints_v1';
+/* ---------------------------
+   App-wide constants & state
+   --------------------------- */
+const DB_NAME = 'llm_toolkit_checkpoints_v1';
 const STORE_NAME = 'checkpoints';
-
+let currentMode = 'local'; // 'local' | 'worker' | 'cloud'
 let worker = null;
-let currentTaskId = '';
-let lastCheckpointMeta = null;
+let isTraining = false;
+let lossData = [];
+let lossChart = null;
+let lastProgressMeta = null;
 
-const startBtn = document.getElementById('startBtn');
-const resumeBtn = document.getElementById('resumeBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const clearBtn = document.getElementById('clearBtn');
-const inspectBtn = document.getElementById('inspectBtn');
+/* ---------------------------
+   UI elements
+   --------------------------- */
+const modeLocalEl = document.getElementById('modeLocal');
+const modeWorkerEl = document.getElementById('modeWorker');
+const modeCloudEl = document.getElementById('modeCloud');
+const inputText = document.getElementById('inputText');
+const loadSampleBtn = document.getElementById('loadSampleBtn');
+const tokenizeBtn = document.getElementById('tokenizeBtn');
+const trainBtn = document.getElementById('trainBtn');
+const stopBtn = document.getElementById('stopBtn');
+const saveNowBtn = document.getElementById('saveNowBtn');
+const taskIdInput = document.getElementById('taskIdInput');
+const epochsInput = document.getElementById('epochs');
+const saveIntervalInput = document.getElementById('saveInterval');
+const lrInput = document.getElementById('lr');
+const batchSizeInput = document.getElementById('batchSize');
 
 const progressFill = document.getElementById('progressFill');
-const progressText = document.getElementById('progressText');
-const statusLog = document.getElementById('statusLog');
-const alertBox = document.getElementById('alertBox');
+const progressLog = document.getElementById('progressLog');
+const statusSmall = document.getElementById('statusSmall');
+
+const resumeBtn = document.getElementById('resumeBtn');
+const inspectBtn = document.getElementById('inspectBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const clearBtn = document.getElementById('clearBtn');
 const inspectPre = document.getElementById('inspectPre');
+const alertBox = document.getElementById('alertBox');
+
+/* ---------------------------
+   Utilities
+   --------------------------- */
+function setMode(mode){
+  currentMode = mode;
+  modeLocalEl.classList.toggle('active', mode === 'local');
+  modeWorkerEl.classList.toggle('active', mode === 'worker');
+  modeCloudEl.classList.toggle('active', mode === 'cloud');
+  logStatus(`Mode set to ${mode}`);
+}
+modeLocalEl.onclick = ()=>setMode('local');
+modeWorkerEl.onclick = ()=>setMode('worker');
+modeCloudEl.onclick = ()=>setMode('cloud');
 
 function logStatus(msg){
   const t = new Date().toLocaleTimeString();
-  statusLog.innerHTML = `<div>[${t}] ${escapeHtml(msg)}</div>` + statusLog.innerHTML;
+  progressLog.innerHTML = `[${t}] ${escapeHtml(msg)}\n` + progressLog.innerHTML;
+  statusSmall.textContent = msg.split('\n')[0];
 }
-function echoAlert(msg){
-  alertBox.textContent = msg;
-  setTimeout(()=>{ if(alertBox.textContent===msg) alertBox.textContent=''; }, 20000);
-}
-function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function createWorker(){
-  if (worker) {
-    worker.terminate();
-    worker = null;
-  }
-  worker = new Worker('training-worker.js');
-  worker.onmessage = handleWorkerMessage;
-  worker.onerror = (ev) => {
-    console.error('Worker error', ev);
-    logStatus('Worker error: ' + (ev.message || 'unknown'));
-    echoAlert('Worker crashed — see console for details.');
-  };
-  logStatus('Worker created');
+function escapeHtml(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function setProgress(pct, text){
+  progressFill.style.width = Math.max(0,Math.min(100,pct)) + '%';
+  progressFill.textContent = Math.round(pct) + '%';
+  if (text) logStatus(text);
 }
 
-function handleWorkerMessage(ev){
-  const msg = ev.data;
-  if (!msg || !msg.type) return;
-  switch(msg.type){
-    case 'progress':
-      updateProgress(msg);
-      break;
-    case 'log':
-      logStatus(msg.text);
-      break;
-    case 'checkpoint-saved':
-      lastCheckpointMeta = msg.meta;
-      logStatus(`Checkpoint saved (step ${msg.meta.stepNumber}, ${new Date(msg.meta.timestamp).toLocaleString()})`);
-      break;
-    case 'checkpoint-error':
-      if (msg.error && msg.error.name === 'QuotaExceededError') {
-        // Worker couldn't save — pause worker and offer download
-        logStatus('Checkpoint failed: quota exceeded.');
-        echoAlert('Storage limit reached. Pausing worker so you can download the checkpoint.');
-        pauseWorker().then(()=>{/*paused*/});
-      } else {
-        logStatus('Checkpoint error: ' + (msg.error && msg.error.message));
-      }
-      break;
-    case 'ready':
-      logStatus('Worker ready');
-      break;
-    case 'resumed':
-      logStatus('Resumed from checkpoint (step ' + msg.step + ')');
-      break;
-    case 'saved-file':
-      // Received checkpoint Blob as downloadable message (rare, normally main will download from IndexedDB)
-      downloadBlob(msg.blob, msg.filename || 'checkpoint.bin');
-      break;
-    default:
-      console.warn('Unknown worker msg', msg);
-  }
-}
-
-function updateProgress({percentage, stepNumber, epochs, status}){
-  const pct = Math.min(100, Math.max(0, Math.round(percentage)));
-  progressFill.style.width = pct + '%';
-  progressFill.textContent = pct + '%';
-  progressText.textContent = `Step ${stepNumber || 0} — ${status || ''} — Epochs target: ${epochs || '?'}`
-}
-
-async function startNewWorker(){
-  createWorker();
-  const taskIdInput = document.getElementById('taskIdInput').value.trim();
-  currentTaskId = taskIdInput || ('task-' + Date.now().toString(36));
-  const epochs = Number(document.getElementById('epochsInput').value) || 50;
-  const saveInterval = Number(document.getElementById('saveIntervalInput').value) || 300000;
-
-  worker.postMessage({type:'start-new', payload:{
-    taskId: currentTaskId,
-    config: {
-      epochs,
-      saveInterval
+/* ---------------------------
+   Chart setup
+   --------------------------- */
+function setupChart(){
+  const ctx = document.getElementById('lossChart').getContext('2d');
+  lossChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Loss',
+        data: [],
+        fill: false,
+        tension: 0.2,
+        borderWidth: 2,
+        pointRadius: 1
+      }]
+    },
+    options: {
+      scales: { x: { display: true }, y: { display: true } },
+      animation: { duration: 200 }
     }
-  }});
-  logStatus('Sent start-new to worker (taskId=' + currentTaskId + ')');
+  });
+}
+setupChart();
+
+function appendLoss(step, loss){
+  lossData.push({step, loss});
+  lossChart.data.labels.push(step.toString());
+  lossChart.data.datasets[0].data.push(loss);
+  lossChart.update();
 }
 
-async function resumeFromCheckpoint(){
-  // Ask worker to resume; worker will load from IndexedDB itself if we send 'resume' and provide taskId
-  createWorker();
-  const taskIdInput = document.getElementById('taskIdInput').value.trim();
-  currentTaskId = taskIdInput || null;
-  worker.postMessage({type:'resume', payload:{taskId: currentTaskId}});
-  logStatus('Sent resume to worker (taskId=' + (currentTaskId||'any') + ')');
-}
-
-async function pauseWorker(){
-  if (!worker) return;
-  worker.postMessage({type:'pause'});
-  logStatus('Sent pause');
-}
-
-async function downloadLatestCheckpoint(){
-  // We'll open IndexedDB and download the Blob for the latest checkpoint for currentTaskId (or newest)
-  try{
-    const meta = await inspectLatestCheckpoint(currentTaskId);
-    if (!meta) {
-      echoAlert('No checkpoint found to download.');
-      return;
-    }
-    const {taskId, timestamp} = meta;
-    const content = await readCheckpointBlob(taskId);
-    if (!content) {
-      echoAlert('Could not load checkpoint data for download.');
-      return;
-    }
-    downloadBlob(content, `checkpoint-${taskId || 'latest'}-${timestamp}.bin`);
-  } catch(err){
-    console.error(err);
-    echoAlert('Download failed: ' + (err.message||err));
-  }
-}
-
-// IndexedDB helpers (main thread)
+/* ---------------------------
+   IndexedDB helpers
+   --------------------------- */
 function openDb(){
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve,reject)=>{
     const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = (e) => {
+    req.onupgradeneeded = (e)=>{
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)){
-        db.createObjectStore(STORE_NAME, {keyPath:'taskId'});
+        db.createObjectStore(STORE_NAME, { keyPath: 'taskId' });
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error('IDB open failed'));
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error || new Error('IDB open failed'));
   });
 }
 
-async function inspectLatestCheckpoint(taskId){
+async function saveCheckpointRecord(record){
+  // record: { taskId, timestamp, stepNumber, taskConfig, modelWeights: Blob }
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const putReq = store.put(record);
+    putReq.onsuccess = ()=>resolve(record);
+    putReq.onerror = ()=>reject(putReq.error || new Error('put failed'));
+    tx.onabort = ()=>reject(new Error('transaction aborted'));
+  });
+}
+
+async function getCheckpoint(taskId){
+  const db = await openDb();
+  return new Promise((resolve,reject)=>{
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
     if (taskId){
       const r = store.get(taskId);
-      r.onsuccess = () => resolve(r.result || null);
-      r.onerror = () => reject(r.error);
+      r.onsuccess = ()=>resolve(r.result || null);
+      r.onerror = ()=>reject(r.error);
     } else {
-      // iterate to find newest by timestamp
+      // find newest by timestamp
       const cur = store.openCursor();
       let best = null;
-      cur.onsuccess = (e) => {
+      cur.onsuccess = (e)=>{
         const cursor = e.target.result;
-        if (!cursor) { resolve(best); return; }
+        if (!cursor){ resolve(best); return; }
         const rec = cursor.value;
         if (!best || (rec.timestamp || 0) > (best.timestamp || 0)) best = rec;
         cursor.continue();
-      }
-      cur.onerror = () => reject(cur.error);
+      };
+      cur.onerror = ()=>reject(cur.error);
     }
   });
 }
 
-async function readCheckpointBlob(taskId){
-  const rec = await inspectLatestCheckpoint(taskId);
-  if (!rec) return null;
-  // modelWeights stored as Blob in rec.modelWeights
-  return rec.modelWeights || null;
-}
-
-function downloadBlob(blob, filename){
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 60000);
-}
-
 async function deleteCheckpoint(taskId){
   const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(STORE_NAME,'readwrite');
     const store = tx.objectStore(STORE_NAME);
     if (taskId){
       const r = store.delete(taskId);
       r.onsuccess = ()=>resolve(true);
       r.onerror = ()=>reject(r.error);
     } else {
-      // delete all
       const c = store.clear();
-      c.onsuccess=()=>resolve(true);
-      c.onerror=()=>reject(c.error);
+      c.onsuccess = ()=>resolve(true);
+      c.onerror = ()=>reject(c.error);
     }
   });
 }
 
-// UI wiring
-startBtn.onclick = ()=>{ startNewWorker(); }
-resumeBtn.onclick = ()=>{ resumeFromCheckpoint(); }
-pauseBtn.onclick = ()=>{ pauseWorker(); }
-downloadBtn.onclick = ()=>{ downloadLatestCheckpoint(); }
-clearBtn.onclick = async ()=> {
-  const taskIdInput = document.getElementById('taskIdInput').value.trim();
-  const id = taskIdInput || null;
-  if (!confirm('Delete checkpoint for ' + (id||'ALL') + '?')) return;
-  await deleteCheckpoint(id);
-  inspectPre.textContent = 'Deleted checkpoint(s).';
-  logStatus('Deleted checkpoint(s).');
+/* ---------------------------
+   Worker lifecycle & handlers
+   --------------------------- */
+function createWorker(){
+  if (worker) worker.terminate();
+  try {
+    worker = new Worker('training-worker.js');
+    worker.onmessage = workerOnMessage;
+    worker.onerror = (ev) => {
+      console.error('Worker error', ev);
+      showAlert('Worker crashed: ' + (ev.message || 'unknown'));
+      isTraining = false;
+      logStatus('Worker crashed.');
+    };
+    logStatus('Worker created');
+  } catch(e){
+    showAlert('Unable to create worker. Is training-worker.js present?');
+  }
 }
+
+async function workerOnMessage(ev){
+  const msg = ev.data;
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'progress':
+      {
+        const pct = Math.min(100, Math.round((msg.stepNumber / (msg.epochs||1)) * 100));
+        setProgress(pct, `Worker: step ${msg.stepNumber} / ${msg.epochs} (loss ${msg.loss || '?'})`);
+        appendLoss(msg.stepNumber, (msg.loss || 0));
+        lastProgressMeta = { stepNumber: msg.stepNumber, timestamp: Date.now() };
+      }
+      break;
+    case 'log':
+      logStatus('Worker: ' + (msg.text || ''));
+      break;
+    case 'checkpoint-saved':
+      lastProgressMeta = { stepNumber: msg.meta.stepNumber, timestamp: msg.meta.timestamp, taskId: msg.meta.taskId };
+      logStatus(`Checkpoint saved: step ${msg.meta.stepNumber}`);
+      break;
+    case 'checkpoint-error':
+      // e.g., QuotaExceededError
+      if (msg.error && msg.error.name === 'QuotaExceededError'){
+        showAlert('Storage limit reached. Pausing worker so you can download the checkpoint.');
+        // ask worker to pause
+        if (worker) worker.postMessage({type:'pause'});
+      }
+      logStatus('Checkpoint error: ' + (msg.error && msg.error.message));
+      break;
+    case 'ready':
+      logStatus('Worker ready');
+      break;
+    case 'resumed':
+      logStatus('Worker resumed from step ' + (msg.step || 0));
+      break;
+    case 'saved-file':
+      // not used by default
+      break;
+    default:
+      console.warn('Unknown worker message', msg);
+  }
+}
+
+/* ---------------------------
+   UI Actions
+   --------------------------- */
+
+loadSampleBtn.onclick = ()=>{
+  inputText.value = `When Jesus had come into the coasts of Caesarea Philippi, he asked his disciples, "Who do men say that I am?"\n\nThis site demonstrates background persistence and non-blocking training in the browser.`;
+  logStatus('Sample text loaded');
+};
+
+tokenizeBtn.onclick = ()=>{
+  // Simple tokenization for demo: split on whitespace, display count
+  const txt = inputText.value || '';
+  const tokens = txt.split(/\s+/).filter(Boolean);
+  logStatus(`Tokenized ${tokens.length} tokens (first 10): ${tokens.slice(0,10).join(' ')}`);
+  alert(`Tokenized ${tokens.length} tokens (see log)`);
+};
+
+/* Training orchestration: Local vs Worker */
+trainBtn.onclick = async ()=>{
+  if (isTraining) { showAlert('Training already in progress'); return; }
+  const taskId = (taskIdInput.value && taskIdInput.value.trim()) || ('task-' + Date.now().toString(36));
+  const epochs = Number(epochsInput.value) || 50;
+  const saveInterval = Number(saveIntervalInput.value) || 300000;
+  const cfg = {
+    taskId, epochs, saveInterval,
+    lr: parseFloat(lrInput.value) || 0.001,
+    batchSize: Number(batchSizeInput.value) || 8
+  };
+
+  if (currentMode === 'local'){
+    // Simple simulated local training loop (non-worker)
+    isTraining = true;
+    logStatus('Starting LOCAL training (main thread) — this may block UI for heavy TF.js tasks.');
+    await runLocalTraining(cfg);
+  } else if (currentMode === 'worker'){
+    // Offload to worker
+    isTraining = true;
+    createWorker();
+    worker.postMessage({type:'start-new', payload:{taskId: cfg.taskId, config:{epochs:cfg.epochs, saveInterval:cfg.saveInterval}}});
+    logStatus('Sent start-new to worker (taskId=' + cfg.taskId + ')');
+  } else {
+    showAlert('Cloud mode currently only provides UI scaffolding. Configure your backend to run training.');
+  }
+};
+
+stopBtn.onclick = ()=>{
+  if (!isTraining) { showAlert('No training process to stop.'); return; }
+  if (currentMode === 'worker' && worker){
+    worker.postMessage({type:'pause'});
+    isTraining = false;
+    logStatus('Requested worker pause.');
+    setProgress(0, 'Paused');
+  } else {
+    // local stop: flip flag
+    isTraining = false;
+    logStatus('Local training stopped.');
+  }
+};
+
+saveNowBtn.onclick = async ()=>{
+  // request worker to save or perform save locally
+  if (currentMode === 'worker' && worker){
+    worker.postMessage({type:'save-now'});
+    logStatus('Requested worker checkpoint now.');
+    return;
+  }
+  // local mode: create a checkpoint Blob and save to IDB
+  try {
+    const taskId = (taskIdInput.value && taskIdInput.value.trim()) || ('task-local-' + Date.now().toString(36));
+    const rec = {
+      taskId,
+      timestamp: Date.now(),
+      stepNumber: lossData.length ? lossData[lossData.length-1].step : 0,
+      taskConfig: { epochs: Number(epochsInput.value) || 50 },
+      modelWeights: new Blob([new Uint8Array([1,2,3])], {type:'application/octet-stream'})
+    };
+    await saveCheckpointRecord(rec);
+    logStatus('Local checkpoint saved to IndexedDB.');
+  } catch(e){
+    if (e && e.name === 'QuotaExceededError'){
+      showAlert('Quota exceeded while saving. Consider downloading checkpoint and clearing storage.');
+    } else showAlert('Save failed: ' + (e && e.message));
+  }
+};
+
+/* Resume / Inspect / Download / Clear */
+resumeBtn.onclick = async ()=>{
+  const taskId = (taskIdInput.value && taskIdInput.value.trim()) || null;
+  const rec = await getCheckpoint(taskId);
+  if (!rec){
+    showAlert('No checkpoint found to resume.');
+    return;
+  }
+  if (!confirm(`Resume checkpoint for task ${rec.taskId} saved ${new Date(rec.timestamp).toLocaleString()} ?`)) return;
+  // if worker mode, send resume; if local, simulate loading
+  if (currentMode === 'worker'){
+    createWorker();
+    worker.postMessage({type:'resume', payload:{taskId: rec.taskId}});
+    logStatus('Sent resume to worker (taskId=' + rec.taskId + ')');
+    isTraining = true;
+  } else {
+    // local mode: pretend we reloaded weights: update chart and state
+    lastProgressMeta = { stepNumber: rec.stepNumber, timestamp: rec.timestamp, taskId: rec.taskId };
+    setProgress(Math.min(100, Math.round((rec.stepNumber / (rec.taskConfig.epochs||1))*100)), 'Resumed locally from checkpoint');
+    inspectPre.textContent = JSON.stringify({
+      taskId: rec.taskId,
+      stepNumber: rec.stepNumber,
+      timestamp: new Date(rec.timestamp).toLocaleString()
+    }, null, 2);
+  }
+};
+
 inspectBtn.onclick = async ()=>{
-  try{
-    const taskIdInput = document.getElementById('taskIdInput').value.trim();
-    const rec = await inspectLatestCheckpoint(taskIdInput || null);
-    if (!rec) {
-      inspectPre.textContent = 'No checkpoint found.';
+  const taskId = (taskIdInput.value && taskIdInput.value.trim()) || null;
+  const rec = await getCheckpoint(taskId);
+  if (!rec){
+    inspectPre.textContent = 'No checkpoint found.';
+    return;
+  }
+  const summary = {
+    taskId: rec.taskId,
+    timestamp: new Date(rec.timestamp).toLocaleString(),
+    stepNumber: rec.stepNumber,
+    taskConfig: rec.taskConfig,
+    modelWeightsBytes: (rec.modelWeights && rec.modelWeights.size) ? rec.modelWeights.size : 'n/a'
+  };
+  inspectPre.textContent = JSON.stringify(summary, null, 2);
+};
+
+downloadBtn.onclick = async ()=>{
+  try {
+    const taskId = (taskIdInput.value && taskIdInput.value.trim()) || null;
+    const rec = await getCheckpoint(taskId);
+    if (!rec || !rec.modelWeights){
+      showAlert('No checkpoint blob found to download.');
       return;
     }
-    const summary = {
-      taskId: rec.taskId,
-      timestamp: new Date(rec.timestamp).toLocaleString(),
-      stepNumber: rec.stepNumber,
-      taskConfig: rec.taskConfig,
-      modelWeightsBytes: (rec.modelWeights && rec.modelWeights.size) ? rec.modelWeights.size : 'n/a'
-    };
-    inspectPre.textContent = JSON.stringify(summary, null, 2);
-  }catch(err){
-    inspectPre.textContent = 'Inspect failed: ' + (err.message||err);
+    const blob = rec.modelWeights;
+    const filename = `checkpoint-${rec.taskId || 'latest'}-${rec.timestamp}.bin`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+    logStatus('Checkpoint downloaded: ' + filename);
+  } catch(e){
+    showAlert('Download failed: ' + (e && e.message));
   }
+};
+
+clearBtn.onclick = async ()=>{
+  if (!confirm('Delete checkpoint(s)?')) return;
+  try {
+    const taskId = (taskIdInput.value && taskIdInput.value.trim()) || null;
+    await deleteCheckpoint(taskId);
+    inspectPre.textContent = 'Deleted checkpoint(s).';
+    logStatus('Deleted checkpoint(s).');
+  } catch(e){
+    showAlert('Delete failed: ' + (e && e.message));
+  }
+};
+
+/* ---------------------------
+   Local training simulation (main thread)
+   Replace or extend with TF.js training if desired
+   --------------------------- */
+async function runLocalTraining(cfg){
+  const epochs = cfg.epochs || 50;
+  const msPerStep = 100; // simulate
+  lossData = [];
+  lossChart.data.labels = []; lossChart.data.datasets[0].data = []; lossChart.update();
+
+  for (let step=1; step<=epochs; step++){
+    if (!isTraining) break;
+    // simulate compute
+    await new Promise(r => setTimeout(r, msPerStep));
+    const loss = Math.max(0, (Math.exp(-step/50) + Math.random()*0.02)).toFixed(4);
+    appendLoss(step, parseFloat(loss));
+    setProgress(Math.round((step/epochs)*100), `Local: step ${step}/${epochs} loss ${loss}`);
+
+    // periodic checkpointing every 10 steps or when requested by save interval
+    if (step % 10 === 0){
+      try {
+        const rec = {
+          taskId: cfg.taskId,
+          timestamp: Date.now(),
+          stepNumber: step,
+          taskConfig: cfg,
+          modelWeights: new Blob([new Uint8Array([1,2,3])], {type:'application/octet-stream'}) // placeholder
+        };
+        await saveCheckpointRecord(rec);
+        logStatus('Local checkpoint saved at step ' + step);
+      } catch(e){
+        if (e && e.name === 'QuotaExceededError'){
+          showAlert('Quota exceeded while saving checkpoint. Consider downloading and clearing storage.');
+          isTraining = false;
+          break;
+        } else {
+          console.error('Checkpoint save failed', e);
+        }
+      }
+    }
+  }
+
+  isTraining = false;
+  logStatus('Local training loop ended.');
 }
 
-// On page load, create worker (but idle)
-createWorker();
-logStatus('Main thread ready.');
+/* ---------------------------
+   Small helpers
+   --------------------------- */
+function showAlert(msg, prefix='') {
+  alertBox.textContent = prefix ? (prefix + ': ' + msg) : msg;
+  setTimeout(()=>{ if (alertBox.textContent === msg || alertBox.textContent === (prefix + ': ' + msg)) alertBox.textContent = ''; }, 25000);
+}
 
-// Try to show if a checkpoint exists at load
-(async ()=>{
-  const recent = await inspectLatestCheckpoint(null);
-  if (recent) {
-    logStatus('Found existing checkpoint for taskId=' + recent.taskId + ' (step ' + recent.stepNumber + ')');
-    inspectPre.textContent = JSON.stringify({
-      taskId: recent.taskId,
-      stepNumber: recent.stepNumber,
-      timestamp: new Date(recent.timestamp).toLocaleString(),
-      modelWeightsBytes: (recent.modelWeights && recent.modelWeights.size) ? recent.modelWeights.size : 'n/a'
-    }, null, 2);
-  } else {
-    inspectPre.textContent = 'No checkpoint present in IndexedDB.';
+/* ---------------------------
+   Auto-inspect existing checkpoint on load
+   --------------------------- */
+(async function autoInspect(){
+  try {
+    const rec = await getCheckpoint(null);
+    if (rec){
+      inspectPre.textContent = JSON.stringify({
+        taskId: rec.taskId,
+        stepNumber: rec.stepNumber,
+        timestamp: new Date(rec.timestamp).toLocaleString(),
+        modelWeightsBytes: (rec.modelWeights && rec.modelWeights.size) ? rec.modelWeights.size : 'n/a'
+      }, null, 2);
+      logStatus('Found checkpoint: ' + rec.taskId + ' (step ' + rec.stepNumber + ')');
+    } else {
+      inspectPre.textContent = 'No checkpoint present in IndexedDB.';
+    }
+  } catch(e){
+    inspectPre.textContent = 'Inspect failed: ' + (e && e.message);
   }
 })();
+
+/* ---------------------------
+   On unload: optionally ask to save
+   --------------------------- */
+window.addEventListener('beforeunload', (ev)=>{
+  if (isTraining && currentMode === 'local'){
+    ev.preventDefault();
+    ev.returnValue = 'Training is in progress — leaving will stop it.';
+    return 'Training is in progress — leaving will stop it.';
+  }
+});
 
 </script>
 </body>
 </html>
-
-
