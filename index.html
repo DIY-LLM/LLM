@@ -3,860 +3,819 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIY LLM Toolkit | Modular Prototype</title>
-    
-    <link href="https://fonts.googleapis.com/css?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <title>DIY LLM Toolkit | Static Persistence Model</title>
+    <!-- Tailwind CSS (for modern aesthetics and responsive design) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
-    <!-- TensorFlow.js and Chart.js for ML and visualization -->
+    <!-- TensorFlow.js for the MiniTransformer -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <!-- Chart.js for visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
-    
-    <!-- Using AWS SDK for the mocked S3 functionality (kept for compatibility) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
 
     <style>
-        /* --- Google Cloud/Material Design Variables --- */
+        /* Custom Styling for a clean, Material Design-inspired look */
         :root {
-            --primary-blue: #1A73E8;
-            --header-blue: #1A2E44;
-            --nav-panel-color: #F1F3F4;
-            --active-item-color: #E8F0FE;
-            --surface-color: #FFFFFF;
-            --background-color: #F8F9FA;
-            --text-color: #202124;
-            --secondary-text: #5F6368;
-            --google-red: #EA4335;
-            --google-green: #34A853;
-            --google-yellow: #FBBC04;
-            --border-color: #DADCE0;
-            --shadow-color: rgba(60, 64, 67, 0.1);
+            --primary-color: #1a73e8; /* Google Blue */
+            --primary-bg: #e8f0fe;
+            --surface-color: #ffffff;
+            --text-color: #3c4043;
+            --secondary-text: #5f6368;
+            --border-color: #dadce0;
+            --shadow-light: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
 
         body {
-            font-family: 'Roboto', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--background-color);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color, #f8f9fa);
             color: var(--text-color);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* --- Layout --- */
-        .container {
-            display: flex;
-            width: 100%;
-        }
-
-        .nav-panel {
-            width: 280px;
-            background-color: var(--nav-panel-color);
-            padding: 20px;
-            box-shadow: 2px 0 5px var(--shadow-color);
-            overflow-y: auto;
-            flex-shrink: 0;
-        }
-
-        .content-area {
-            flex-grow: 1;
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        /* --- UI Elements --- */
-        h1 {
-            color: var(--header-blue);
-            font-size: 1.8em;
-            font-weight: 500;
-            margin-top: 0;
-            border-bottom: 2px solid var(--primary-blue);
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-
-        h2 {
-            color: var(--primary-blue);
-            font-size: 1.4em;
-            font-weight: 400;
-            margin-top: 25px;
-            margin-bottom: 15px;
+            min-height: 100vh;
         }
 
         .card {
             background-color: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-light);
+            border: 1px solid var(--border-color);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 16px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px var(--shadow-color);
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
-        }
-
-        textarea, input[type="text"], input[type="number"], select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 1em;
-            font-family: inherit;
-        }
-
-        .button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
             font-weight: 500;
-            transition: all 0.2s ease;
-            margin-right: 10px;
-            margin-bottom: 10px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #1669d6;
         }
 
-        .button-primary {
-            background-color: var(--primary-blue);
-            color: var(--surface-color);
-        }
-
-        .button-primary:hover {
-            background-color: #1565C0;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .button-secondary {
-            background-color: var(--nav-panel-color);
-            color: var(--text-color);
-            border: 1px solid var(--border-color);
-        }
-
-        .button-secondary:hover {
-            background-color: #E6E9EA;
-        }
-
-        .button-red {
-            background-color: var(--google-red);
-            color: var(--surface-color);
-        }
-
-        .button-red:hover {
-            background-color: #D32F2F;
-        }
-
-        .label {
-            display: block;
-            margin-bottom: 5px;
+        .tab-item {
+            cursor: pointer;
+            padding: 10px 16px;
+            border-radius: 8px;
+            transition: background-color 0.2s, color 0.2s;
             font-weight: 500;
             color: var(--secondary-text);
         }
-
-        /* --- Training Status Indicator --- */
-        #worker-status {
-            font-weight: 700;
-            padding: 5px 10px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-left: 10px;
+        .tab-item.active {
+            color: var(--primary-color);
+            background-color: var(--primary-bg);
         }
-
-        .status-ready {
-            background-color: #E6F3E9; /* Light green */
-            color: var(--google-green);
-        }
-
-        .status-initializing, .status-loading {
-            background-color: #FFFBE5; /* Light yellow */
-            color: var(--google-yellow);
-        }
-
-        .status-training {
-            background-color: #E8F0FE; /* Light blue */
-            color: var(--primary-blue);
-        }
-        
-        .status-error {
-            background-color: #FEEBE7; /* Light red */
-            color: var(--google-red);
-        }
-        
-        /* --- Alert Box --- */
-        #alert-box {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background-color: var(--surface-color);
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            padding: 15px;
-            border-left: 5px solid var(--primary-blue);
-            max-width: 350px;
-            display: none;
-            transition: all 0.3s ease;
-        }
-
-        #alert-box.show {
-            display: block;
-            opacity: 1;
-        }
-
-        #alert-box-title {
-            font-weight: 700;
-            margin-bottom: 5px;
-            color: var(--primary-blue);
-        }
-
-        #alert-box-message {
-            font-size: 0.9em;
-        }
-        
-        /* --- Chart Container --- */
-        #loss-chart-container {
-            height: 250px;
-            width: 100%;
-        }
-
-        /* --- Responsive Design --- */
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-            }
-            .nav-panel {
-                width: 100%;
-                height: auto;
-                max-height: 50vh;
-                order: 2; /* Move to the bottom for mobile, or keep on top */
-            }
-            .content-area {
-                order: 1;
-                padding: 15px;
-            }
-            .card {
-                padding: 15px;
-            }
+        .tab-item:hover:not(.active) {
+            background-color: #f1f3f4;
         }
     </style>
 </head>
-<body>
+<body class="p-4 md:p-8">
 
-    <div class="container">
-        
-        <!-- Navigation/Control Panel -->
-        <div class="nav-panel">
-            <h1 style="margin-bottom: 10px; border: none;">DIY LLM Toolkit</h1>
-            <p style="color: var(--secondary-text); margin-top: 0;">Modular Prototype</p>
+    <!-- Main Container -->
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">
+            <i class="fas fa-brain text-primary-color mr-2"></i> DIY LLM Toolkit
+        </h1>
 
-            <div class="card">
-                <h2>Mode Selection</h2>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <button id="mode-markov" class="button button-secondary" onclick="setMode('MARKOV')">
-                        <i class="fas fa-random"></i> Markov Chain
-                    </button>
-                    <button id="mode-transformer" class="button button-primary" onclick="setMode('TRANSFORMER')">
-                        <i class="fas fa-brain"></i> Mini Transformer
-                    </button>
-                </div>
-                <div style="font-size: 0.9em;">
-                    <strong>Current Mode:</strong> <span id="current-mode">Mini Transformer</span>
-                </div>
-            </div>
-
-            <div class="card" id="data-card">
-                <h2>Data & Tokenization</h2>
-                <label class="label" for="training-data">Training Data</label>
-                <textarea id="training-data" rows="5" placeholder="Enter your text corpus here..."></textarea>
-                
-                <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: var(--secondary-text); margin-bottom: 10px;">
-                    <span id="token-count">Tokens: 0</span>
-                    <span id="vocab-size">Vocab: 0</span>
-                </div>
-                
-                <button class="button button-secondary" onclick="handleDataUpload()">
-                    <i class="fas fa-upload"></i> Upload Data
-                </button>
-                <button class="button button-secondary" onclick="dataHandler.tokenizeData()">
-                    <i class="fas fa-code"></i> Tokenize
-                </button>
-            </div>
-
-            <div class="card" id="transformer-train-card">
-                <h2>Transformer Training</h2>
-                <div style="margin-bottom: 10px; font-size: 0.9em; color: var(--secondary-text);">
-                    <i class="fas fa-circle-notch fa-spin status-initializing" style="font-size: 0.9em;"></i>
-                    <strong id="worker-status" class="status-initializing">Status: Initializing</strong>
-                </div>
-
-                <div class="grid-2-col" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div>
-                        <label class="label" for="epochs">Epochs</label>
-                        <input type="number" id="epochs" value="10" min="1" max="100">
-                    </div>
-                    <div>
-                        <label class="label" for="batch-size">Batch Size</label>
-                        <input type="number" id="batch-size" value="16" min="8" max="64">
-                    </div>
-                </div>
-
-                <button id="train-button" class="button button-primary" onclick="miniTransformer.startTraining(parseInt(document.getElementById('epochs').value), parseInt(document.getElementById('batch-size').value))">
-                    <i class="fas fa-play"></i> Start Training
-                </button>
-                <button id="stop-button" class="button button-red" disabled onclick="miniTransformer.stopTraining()">
-                    <i class="fas fa-stop"></i> Stop Training
-                </button>
-                <button id="delete-checkpoint-button" class="button button-secondary" onclick="miniTransformer.deleteCheckpoint()">
-                    <i class="fas fa-trash-alt"></i> Delete Checkpoint
-                </button>
-                
-                <div id="loss-chart-container" style="margin-top: 20px;">
-                    <canvas id="loss-chart"></canvas>
-                </div>
-            </div>
-            
-             <div class="card" id="markov-train-card" style="display: none;">
-                <h2>Markov Training</h2>
-                <p style="font-size: 0.9em; color: var(--secondary-text);">
-                    <i class="fas fa-info-circle"></i> Training is instantaneous for Markov Chains.
-                </p>
-                <button class="button button-primary" onclick="markovModel.train(dataHandler.getTokens())">
-                    <i class="fas fa-play"></i> Train Markov Model
-                </button>
-                <div id="markov-status" style="margin-top: 15px; font-size: 0.9em; font-weight: 500; color: var(--secondary-text);">
-                    Model Status: Untrained
-                </div>
-            </div>
+        <!-- Header for Configuration and Status -->
+        <div id="status-display" class="card p-4 mb-6 bg-yellow-50 border-yellow-300 text-yellow-800 shadow-md">
+            <p class="text-sm font-medium">
+                <i class="fas fa-exclamation-triangle mr-2"></i> Status: Please upload or load data to begin.
+            </p>
         </div>
-        
-        <!-- Main Content Area -->
-        <div class="content-area">
-            <h1>LLM Generation</h1>
-            
-            <div class="card">
-                <h2>Prompt & Generation</h2>
-                <label class="label" for="prompt-input">Input Prompt (Seed Text)</label>
-                <input type="text" id="prompt-input" placeholder="Start your prompt here...">
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div style="font-size: 0.9em;">
-                        <label class="label" for="temperature-slider">Temperature: <span id="temperature-value">0.8</span></label>
-                        <input type="range" id="temperature-slider" min="0.1" max="1.5" step="0.1" value="0.8" oninput="updateTemperature(this.value)" style="width: 150px; margin: 0; vertical-align: middle;">
+
+        <!-- Main Content Area: Left (Nav) & Right (Content) -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+            <!-- Left Panel (Navigation) -->
+            <div class="lg:col-span-1 card p-4 h-full">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Tool Modules</h2>
+                <nav id="nav-tabs" class="space-y-1">
+                    <div class="tab-item active" data-tab="data-ingestion-tab">
+                        <i class="fas fa-file-import w-5 mr-2"></i> Data Ingestion
                     </div>
-                    <button class="button button-primary" onclick="handleGeneration()">
-                        <i class="fas fa-feather-alt"></i> Generate Text
-                    </button>
-                </div>
+                    <div class="tab-item" data-tab="tokenization-tab">
+                        <i class="fas fa-table w-5 mr-2"></i> Tokenization
+                    </div>
+                    <div class="tab-item" data-tab="model-selection-tab">
+                        <i class="fas fa-cogs w-5 mr-2"></i> Model Selection
+                    </div>
+                    <div class="tab-item" data-tab="training-tab">
+                        <i class="fas fa-running w-5 mr-2"></i> Training (Local)
+                    </div>
+                    <div class="tab-item" data-tab="generation-tab">
+                        <i class="fas fa-feather-alt w-5 mr-2"></i> Text Generation
+                    </div>
+                    <div class="tab-item" data-tab="model-persistence-tab">
+                        <i class="fas fa-save w-5 mr-2"></i> Model Persistence
+                    </div>
+                </nav>
             </div>
 
-            <div class="card">
-                <h2>Output</h2>
-                <div id="output-area" style="min-height: 150px; background-color: var(--background-color); padding: 10px; border-radius: 4px; border: 1px dashed var(--border-color); color: var(--secondary-text);">
-                    Generated text will appear here...
+            <!-- Right Panel (Tab Content) -->
+            <div id="tab-content" class="lg:col-span-3">
+
+                <!-- 1. Data Ingestion Tab -->
+                <div id="data-ingestion-tab" class="tab-page">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">1. Data Ingestion</h2>
+                        <p class="text-sm mb-4 text-secondary-text">Upload a text file, paste text directly, or load a sample dataset to train your LLM.</p>
+
+                        <div id="data-drop-zone" class="border-2 border-dashed border-border-color p-8 text-center rounded-lg mb-4 hover:bg-gray-50 transition duration-150 cursor-pointer">
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+                            <p class="text-secondary-text">Drag & drop a text file (.txt) here, or click to select.</p>
+                            <input type="file" id="file-input" accept=".txt" class="hidden">
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <button id="load-sample-btn" class="btn-primary flex items-center justify-center bg-gray-600 hover:bg-gray-700">
+                                <i class="fas fa-book-open mr-2"></i> Load Sample Data (10k words)
+                            </button>
+                            <button id="paste-data-btn" class="btn-primary flex items-center justify-center bg-gray-600 hover:bg-gray-700">
+                                <i class="fas fa-paste mr-2"></i> Paste Text Manually
+                            </button>
+                        </div>
+
+                        <textarea id="raw-data-display" class="w-full h-48 p-3 border border-border-color rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-color" placeholder="Raw data will appear here..."></textarea>
+                    </div>
                 </div>
+
+                <!-- 2. Tokenization Tab -->
+                <div id="tokenization-tab" class="tab-page hidden">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">2. Tokenization & Preprocessing</h2>
+                        <p class="text-sm mb-4 text-secondary-text">Tokenization converts raw text into numerical indices for the model to understand. This process creates the vocabulary.</p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label for="max-vocab-size" class="block text-sm font-medium mb-1">Max Vocabulary Size:</label>
+                                <input type="number" id="max-vocab-size" value="5000" min="100" class="w-full p-2 border border-border-color rounded-lg focus:ring-primary-color focus:border-primary-color">
+                                <p class="text-xs text-secondary-text mt-1">Limits the size of the vocabulary. Tokens outside this size will be marked as [UNK].</p>
+                            </div>
+                            <div>
+                                <label for="sequence-length" class="block text-sm font-medium mb-1">Training Sequence Length:</label>
+                                <input type="number" id="sequence-length" value="128" min="10" class="w-full p-2 border border-border-color rounded-lg focus:ring-primary-color focus:border-primary-color">
+                                <p class="text-xs text-secondary-text mt-1">The maximum number of tokens in one training input sequence (context window).</p>
+                            </div>
+                        </div>
+
+                        <button id="tokenize-btn" class="btn-primary w-full mt-6 flex items-center justify-center">
+                            <i class="fas fa-cut mr-2"></i> Run Tokenization
+                        </button>
+
+                        <div id="token-status" class="mt-6 p-3 bg-primary-bg rounded-lg border-l-4 border-primary-color">
+                            <p class="text-sm font-medium">Vocabulary Status: Not Tokenized.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Model Selection Tab -->
+                <div id="model-selection-tab" class="tab-page hidden">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">3. Model Selection & Configuration</h2>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium mb-2">Select LLM Architecture</label>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition hover:bg-gray-50">
+                                    <input type="radio" name="llm-mode" value="MARKOV" checked>
+                                    <span class="font-medium">Markov Chain (Basic)</span>
+                                    <span class="text-xs text-secondary-text ml-2">(Fast training, simple text)</span>
+                                </label>
+                                <label class="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer transition hover:bg-gray-50">
+                                    <input type="radio" name="llm-mode" value="TRANSFORMER">
+                                    <span class="font-medium">Mini-Transformer (Advanced)</span>
+                                    <span class="text-xs text-secondary-text ml-2">(Slower training, coherent text)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Transformer Configuration -->
+                        <div id="transformer-config" class="space-y-4 p-4 border rounded-lg bg-gray-50">
+                            <h3 class="text-lg font-semibold mb-2">Mini-Transformer Settings</h3>
+                            <div>
+                                <label for="embedding-dim" class="block text-sm font-medium mb-1">Embedding Dimension:</label>
+                                <input type="number" id="embedding-dim" value="64" min="32" max="256" step="32" class="w-full p-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label for="num-heads" class="block text-sm font-medium mb-1">Number of Attention Heads:</label>
+                                <input type="number" id="num-heads" value="2" min="1" max="8" class="w-full p-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label for="transformer-layers" class="block text-sm font-medium mb-1">Transformer Layers:</label>
+                                <input type="number" id="transformer-layers" value="1" min="1" max="4" class="w-full p-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label for="learning-rate" class="block text-sm font-medium mb-1">Learning Rate:</label>
+                                <input type="number" id="learning-rate" value="0.001" step="0.0001" min="0.0001" max="0.1" class="w-full p-2 border rounded-lg">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Training Tab -->
+                <div id="training-tab" class="tab-page hidden">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">4. Training (Local)</h2>
+                        <p class="text-sm mb-4 text-secondary-text">Start training your selected model using the preprocessed data. Training runs entirely in your browser.</p>
+
+                        <div class="mb-4 space-y-3">
+                            <div>
+                                <label for="epochs" class="block text-sm font-medium mb-1">Epochs (For Transformer):</label>
+                                <input type="number" id="epochs" value="10" min="1" max="100" class="w-full p-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label for="batch-size" class="block text-sm font-medium mb-1">Batch Size (For Transformer):</label>
+                                <input type="number" id="batch-size" value="64" min="16" max="256" class="w-full p-2 border rounded-lg">
+                            </div>
+                        </div>
+
+                        <button id="start-training-btn" class="btn-primary w-full mt-4 flex items-center justify-center">
+                            <i class="fas fa-play-circle mr-2"></i> Start Training
+                        </button>
+
+                        <div id="training-status-log" class="mt-6 p-4 border rounded-lg bg-gray-50 text-sm h-32 overflow-y-auto">
+                            <p class="text-secondary-text">Training log will appear here...</p>
+                        </div>
+
+                        <!-- Loss Chart for MiniTransformer -->
+                        <div id="loss-chart-container" class="mt-6 border rounded-lg p-4 hidden">
+                            <h3 class="text-base font-semibold mb-2">Training Loss</h3>
+                            <canvas id="loss-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Generation Tab -->
+                <div id="generation-tab" class="tab-page hidden">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">5. Text Generation</h2>
+                        <p class="text-sm mb-4 text-secondary-text">Enter a prompt and generate text using your trained model.</p>
+
+                        <div class="mb-4">
+                            <label for="generation-prompt" class="block text-sm font-medium mb-1">Prompt:</label>
+                            <textarea id="generation-prompt" class="w-full h-24 p-3 border rounded-lg focus:ring-primary-color" placeholder="Start your story here..."></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label for="output-length" class="block text-sm font-medium mb-1">Output Length (Tokens):</label>
+                                <input type="number" id="output-length" value="200" min="10" max="1000" class="w-full p-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label for="temperature" class="block text-sm font-medium mb-1">Temperature (Creativity):</label>
+                                <input type="number" id="temperature" value="0.8" step="0.1" min="0.1" max="1.5" class="w-full p-2 border rounded-lg">
+                            </div>
+                        </div>
+
+                        <button id="generate-btn" class="btn-primary w-full mt-4 flex items-center justify-center">
+                            <i class="fas fa-magic mr-2"></i> Generate Text
+                        </button>
+
+                        <div id="generation-output" class="mt-6 p-4 border rounded-lg bg-primary-bg min-h-[100px] text-sm">
+                            <p class="text-secondary-text">Generated text will appear here...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. Model Persistence Tab (Replaced Cloud Training) -->
+                <div id="model-persistence-tab" class="tab-page hidden">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-semibold mb-4 text-primary-color">6. Model Persistence (Client-Side)</h2>
+                        <p class="text-sm mb-4 text-secondary-text">Save and Load your trained Mini-Transformer model weights to/from your browser's local storage. This preserves your training progress across sessions.</p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <button id="save-model-btn" class="btn-primary flex items-center justify-center bg-green-600 hover:bg-green-700">
+                                <i class="fas fa-save mr-2"></i> Save Model to Browser
+                            </button>
+                            <button id="load-model-btn" class="btn-primary flex items-center justify-center bg-purple-600 hover:bg-purple-700">
+                                <i class="fas fa-upload mr-2"></i> Load Model from Browser
+                            </button>
+                        </div>
+
+                        <div id="persistence-status" class="mt-6 p-4 border rounded-lg bg-gray-50 text-sm">
+                            <p class="text-secondary-text font-medium">Model Persistence Status: Ready.</p>
+                        </div>
+
+                        <p class="text-xs text-secondary-text mt-4">
+                            <i class="fas fa-info-circle mr-1"></i> Note: This feature only works for the **Mini-Transformer** model, as the Markov Chain is automatically rebuilt when data is loaded.
+                        </p>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
-    
-    <!-- Custom Alert Box -->
-    <div id="alert-box">
-        <div id="alert-box-title"></div>
-        <div id="alert-box-message"></div>
+
+    <!-- Modals -->
+    <!-- Manual Data Input Modal -->
+    <div id="paste-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl">
+            <h3 class="text-lg font-semibold mb-4">Paste Your Training Data</h3>
+            <textarea id="manual-data-input" class="w-full h-64 p-3 border rounded-lg focus:ring-primary-color" placeholder="Paste your large text corpus here..."></textarea>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button id="cancel-paste-btn" class="px-4 py-2 text-secondary-text border rounded-lg hover:bg-gray-100">Cancel</button>
+                <button id="submit-paste-btn" class="btn-primary">Load Data</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Hidden Script for Web Worker Content -->
-    <!-- FIX 1: Worker script embedded as a template literal string to create a Blob URL -->
-    <script id="training-worker-source" type="text/template">
-        // training-worker.js
-        // Runs in a background thread for non-blocking UI training with IndexedDB persistence
-        // ====
+    <!-- Custom Message Modal (for alerts/confirmations) -->
+    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl">
+            <h3 id="message-title" class="text-lg font-semibold mb-4 text-gray-800"></h3>
+            <p id="message-content" class="text-sm text-secondary-text mb-6"></p>
+            <div class="flex justify-end space-x-3">
+                <button id="modal-close-btn" class="btn-primary bg-primary-color">OK</button>
+            </div>
+        </div>
+    </div>
 
-        // Import TF.js in the worker thread
-        importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
 
-        let CONFIG = {}; // Will be set on 'START'
+    <script>
+        // --- Configuration & State Management ---
+        const CONFIG = {
+            MODEL_STORAGE_KEY: 'DIY_LLM_MiniTransformer_v1', // Unique key for local storage
+            MAX_VOCAB_SIZE: 5000,
+            SEQUENCE_LENGTH: 128,
+            EMBEDDING_DIM: 64,
+            NUM_HEADS: 2,
+            TRANSFORMER_LAYERS: 1,
+            LEARNING_RATE: 0.001,
+            EPOCHS: 10,
+            BATCH_SIZE: 64,
+            OUTPUT_LENGTH: 200,
+            TEMPERATURE: 0.8,
+        };
 
-        let workerModel = null;
-        let currentTrainingJob = null;
-        let checkpointMetadata = null;
-        let tokenizerState = { vocab: new Map(), idToToken: new Map() };
-        let isTraining = false;
-        let tfjsInitialized = false;
+        const state = {
+            mode: 'MARKOV', // MARKOV or TRANSFORMER
+            rawData: '',
+            tokenizedData: null,
+            vocabSize: 0,
+            isTrained: false,
+            isTokenized: false,
+            isTraining: false,
+            markovModel: null,
+            miniTransformer: null,
+        };
 
-        // IndexedDB Persistence
-        // ======================
+        // --- Utility Functions (Including Custom Alert) ---
 
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(CONFIG.DB_NAME, 1);
-
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    db.createObjectStore(CONFIG.STORE_NAME, { keyPath: 'taskId' });
-                };
-
-                request.onsuccess = (event) => resolve(event.target.result);
-                request.onerror = (event) => reject(event.target.error);
-            });
+        /**
+         * Custom non-blocking message box (replaces alert()).
+         * @param {string} title
+         * @param {string} content
+         */
+        function showMessage(title, content) {
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-content').textContent = content;
+            document.getElementById('message-modal').classList.remove('hidden');
+            document.getElementById('message-modal').classList.add('flex');
         }
 
-        async function saveCheckpoint(taskId, epoch, loss, weights) {
-            // Check for max size before saving (simplified check)
-            if (weights.byteLength / (1024 * 1024) > CONFIG.MAX_CHECKPOINT_SIZE_MB) {
-                 console.warn("Checkpoint size exceeds max limit. Skipping save.");
-                 return;
+        document.getElementById('modal-close-btn').addEventListener('click', () => {
+            document.getElementById('message-modal').classList.add('hidden');
+            document.getElementById('message-modal').classList.remove('flex');
+        });
+
+        function updateStatusDisplay(message, type = 'info') {
+            const display = document.getElementById('status-display');
+            let classes = '';
+            let icon = '';
+
+            if (type === 'success') {
+                classes = 'bg-green-50 border-green-300 text-green-800';
+                icon = '<i class="fas fa-check-circle mr-2"></i>';
+            } else if (type === 'error') {
+                classes = 'bg-red-50 border-red-300 text-red-800';
+                icon = '<i class="fas fa-times-circle mr-2"></i>';
+            } else { // info/default
+                classes = 'bg-yellow-50 border-yellow-300 text-yellow-800';
+                icon = '<i class="fas fa-exclamation-triangle mr-2"></i>';
             }
 
-            const db = await openDB();
-            const tx = db.transaction(CONFIG.STORE_NAME, 'readwrite');
-            const store = tx.objectStore(CONFIG.STORE_NAME);
-
-            const record = {
-                taskId: taskId,
-                epoch: epoch,
-                loss: loss,
-                timestamp: Date.now(),
-                weights: weights // ArrayBuffer of the model weights
-            };
-
-            return new Promise((resolve, reject) => {
-                const request = store.put(record);
-                request.onsuccess = () => resolve();
-                request.onerror = (event) => reject(event.target.error);
-            });
+            display.className = `card p-4 mb-6 ${classes} shadow-md`;
+            display.innerHTML = `<p class="text-sm font-medium">${icon} Status: ${message}</p>`;
         }
 
-        async function loadCheckpoint(taskId) {
-            const db = await openDB();
-            const tx = db.transaction(CONFIG.STORE_NAME, 'readonly');
-            const store = tx.objectStore(CONFIG.STORE_NAME);
-
-            return new Promise((resolve, reject) => {
-                const request = store.get(taskId);
-                request.onsuccess = (event) => resolve(event.target.result);
-                request.onerror = (event) => reject(event.target.error);
-            });
+        function toggleLoading(element, isLoading, text) {
+            if (isLoading) {
+                element.disabled = true;
+                element.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> ${text}...`;
+            } else {
+                element.disabled = false;
+                element.innerHTML = text;
+            }
         }
 
-        async function deleteCheckpoint(taskId) {
-            const db = await openDB();
-            const tx = db.transaction(CONFIG.STORE_NAME, 'readwrite');
-            const store = tx.objectStore(CONFIG.STORE_NAME);
+        // --- Vocabulary and Tokenization Class ---
+        class Vocabulary {
+            constructor(maxVocabSize, sequenceLength) {
+                this.maxVocabSize = maxVocabSize;
+                this.sequenceLength = sequenceLength;
+                this.wordToId = {};
+                this.idToWord = [];
+                this.UNK = '[UNK]';
+                this.PAD = '[PAD]';
+                this.idToWord[0] = this.PAD;
+                this.wordToId[this.PAD] = 0;
+                this.idToWord[1] = this.UNK;
+                this.wordToId[this.UNK] = 1;
+                this.nextId = 2;
+            }
 
-            return new Promise((resolve, reject) => {
-                const request = store.delete(taskId);
-                request.onsuccess = () => {
-                    checkpointMetadata = null; // Clear metadata on successful delete
-                    postMessage({ command: 'CHECKPOINT_DELETED' });
-                    resolve();
+            tokenize(text) {
+                // Simple tokenization: lower-case, split by non-alphanumeric (keeping apostrophes)
+                const tokens = text.toLowerCase().match(/\w+'\w+|\w+|[.,!?;'"]/g) || [];
+                return tokens;
+            }
+
+            build(tokens) {
+                const wordCounts = {};
+                tokens.forEach(word => {
+                    wordCounts[word] = (wordCounts[word] || 0) + 1;
+                });
+
+                const sortedWords = Object.keys(wordCounts).sort((a, b) => wordCounts[b] - wordCounts[a]);
+
+                for (const word of sortedWords) {
+                    if (this.nextId < this.maxVocabSize) {
+                        this.wordToId[word] = this.nextId;
+                        this.idToWord[this.nextId] = word;
+                        this.nextId++;
+                    } else {
+                        // All subsequent words will be mapped to UNK
+                        break;
+                    }
                 }
-                request.onerror = (event) => reject(event.target.error);
-            });
-        }
+                return this.nextId; // Final vocabulary size
+            }
 
-        async function checkExistingCheckpoint() {
-            try {
-                const data = await loadCheckpoint(CONFIG.taskId);
-                if (data) {
-                    checkpointMetadata = {
-                        epoch: data.epoch,
-                        loss: data.loss,
-                        timestamp: data.timestamp
-                    };
-                    postMessage({ command: 'CHECKPOINT_FOUND', metadata: checkpointMetadata });
-                } else {
-                    checkpointMetadata = null;
-                    postMessage({ command: 'CHECKPOINT_NOT_FOUND' });
+            textsToSequences(text) {
+                const tokens = this.tokenize(text);
+                const sequences = [];
+
+                for (let i = 0; i <= tokens.length - this.sequenceLength; i++) {
+                    const inputTokens = tokens.slice(i, i + this.sequenceLength - 1);
+                    const targetToken = tokens[i + this.sequenceLength - 1];
+
+                    const inputIds = inputTokens.map(word => this.wordToId[word] || this.wordToId[this.UNK]);
+                    const targetId = this.wordToId[targetToken] || this.wordToId[this.UNK];
+
+                    sequences.push({ input: inputIds, target: targetId });
                 }
-            } catch (e) {
-                console.error("Error checking checkpoint:", e);
-                postMessage({ command: 'ERROR', message: `Error checking checkpoint: ${e.message}` });
+                return sequences;
+            }
+
+            idsToText(ids) {
+                return ids.map(id => this.idToWord[id] || this.UNK).join(' ');
             }
         }
-        
-        // Model Definition
-        // ======================
 
-        function createModel(vocabSize, sequenceLength) {
-            if (workerModel) {
-                workerModel.dispose();
+        // --- Markov Chain Model ---
+        class MarkovModel {
+            constructor(vocab) {
+                this.vocab = vocab;
+                this.transitionMatrix = {};
             }
 
-            const embeddingDim = 64;
-            const headSize = 128; // Smaller head size for mini transformer
-            const numHeads = 4;
-            const numLayers = 2; // Very shallow transformer
+            train(text) {
+                const tokens = this.vocab.tokenize(text);
+                this.transitionMatrix = {};
 
-            const input = tf.input({ shape: [sequenceLength] });
-            
-            let x = tf.layers.embedding({
-                inputDim: vocabSize,
-                outputDim: embeddingDim,
-                inputLength: sequenceLength
-            }).apply(input);
+                for (let i = 0; i < tokens.length - 1; i++) {
+                    const currentWord = tokens[i];
+                    const nextWord = tokens[i + 1];
 
-            // Add position encoding (simplified/learned)
-            // x = tf.layers.positionalEncoding().apply(x); // Not available in TF.js by default, simplified for this prototype
-
-            // Simple Attention/Dense Layers as a substitute for a full Transformer block
-            for (let i = 0; i < numLayers; i++) {
-                // Simplified multi-head attention (using Dense layers)
-                // In a real mini-transformer, this would be a proper Attention layer
-                x = tf.layers.dense({ units: headSize, activation: 'relu' }).apply(x);
-                x = tf.layers.dense({ units: embeddingDim }).apply(x);
-                x = tf.layers.layerNormalization().apply(x);
-            }
-            
-            // Global average pooling (needed to flatten for final Dense layer)
-            x = tf.layers.globalAveragePooling1d().apply(x);
-            
-            // Final prediction layer
-            const output = tf.layers.dense({
-                units: vocabSize,
-                activation: 'softmax'
-            }).apply(x);
-
-            workerModel = tf.model({ inputs: input, outputs: output });
-
-            workerModel.compile({
-                optimizer: tf.train.adam(CONFIG.train.learningRate),
-                loss: 'sparseCategoricalCrossentropy',
-                metrics: ['accuracy']
-            });
-            
-            console.log("Mini Transformer Model Created. Layers:", workerModel.layers.length);
-        }
-
-        // Training Logic
-        // ======================
-        
-        // Function to convert ArrayBuffer back to an array of TF.Tensors
-        function arrayBufferToWeights(buffer, weightsInfo) {
-            const data = new Float32Array(buffer); // Assuming Float32, adjust if necessary
-            let offset = 0;
-            const tensors = [];
-            
-            for (const info of weightsInfo) {
-                const size = info.shape.reduce((a, b) => a * b, 1);
-                const tensorData = data.slice(offset, offset + size);
-                tensors.push(tf.tensor(tensorData, info.shape, info.dtype));
-                offset += size;
-            }
-            return tensors;
-        }
-
-        async function trainWorkerModel(data) {
-            if (isTraining) {
-                console.log("Already training.");
-                return;
-            }
-
-            isTraining = true;
-            CONFIG = data.config;
-            tokenizerState = data.tokenizerState;
-            const vocabSize = data.vocabSize;
-            const sequenceLength = CONFIG.SEQUENCE_LENGTH;
-            const { inputSequences, targetTokens } = data.trainingData;
-            
-            const epochs = CONFIG.train.epochs;
-            const batchSize = CONFIG.train.batchSize;
-            let currentEpoch = 0;
-
-            // 1. Create Model
-            createModel(vocabSize, sequenceLength);
-
-            // 2. Load Checkpoint if available
-            try {
-                const checkpoint = await loadCheckpoint(CONFIG.taskId);
-                if (checkpoint) {
-                    currentEpoch = checkpoint.epoch;
-                    
-                    // Convert weights ArrayBuffer back to Tensors
-                    const weightData = workerModel.getWeights().map(w => ({ name: w.name, dtype: w.dtype, shape: w.shape }));
-                    const tensors = arrayBufferToWeights(checkpoint.weights, weightData);
-                    
-                    workerModel.setWeights(tensors);
-                    tensors.forEach(t => t.dispose()); // Clean up loaded tensors
-                    console.log(`Model restored from epoch ${currentEpoch}.`);
+                    if (!this.transitionMatrix[currentWord]) {
+                        this.transitionMatrix[currentWord] = {};
+                    }
+                    this.transitionMatrix[currentWord][nextWord] = (this.transitionMatrix[currentWord][nextWord] || 0) + 1;
                 }
-            } catch (e) {
-                console.error("Error loading checkpoint, starting from scratch:", e);
-                // Continue with a fresh model
             }
 
-            // 3. Prepare Data
-            const xTrain = tf.tensor2d(inputSequences, [inputSequences.length, sequenceLength], 'int32');
-            const yTrain = tf.tensor1d(targetTokens, 'int32');
+            generate(prompt, length = CONFIG.OUTPUT_LENGTH) {
+                let text = this.vocab.tokenize(prompt);
+                let currentWord = text.length > 0 ? text[text.length - 1] : '';
 
-            // 4. Start Training
-            try {
-                await workerModel.fit(xTrain, yTrain, {
-                    epochs: epochs,
-                    initialEpoch: currentEpoch, // Start from where we left off
-                    batchSize: batchSize,
+                if (!this.transitionMatrix[currentWord]) {
+                    // Try to pick a new random starting word if the prompt's last word is unknown
+                    const keys = Object.keys(this.transitionMatrix);
+                    currentWord = keys[Math.floor(Math.random() * keys.length)];
+                }
+
+                for (let i = 0; i < length; i++) {
+                    const transitions = this.transitionMatrix[currentWord];
+                    if (!transitions) break;
+
+                    const total = Object.values(transitions).reduce((sum, count) => sum + count, 0);
+                    let randomIndex = Math.random() * total;
+                    let nextWord = null;
+
+                    for (const word in transitions) {
+                        randomIndex -= transitions[word];
+                        if (randomIndex <= 0) {
+                            nextWord = word;
+                            break;
+                        }
+                    }
+
+                    if (nextWord) {
+                        text.push(nextWord);
+                        currentWord = nextWord;
+                    } else {
+                        break; // End generation if no next word found
+                    }
+                }
+                return text.join(' ');
+            }
+        }
+
+        // --- Mini-Transformer Model (TensorFlow.js) ---
+
+        class MiniTransformer {
+            constructor(vocab) {
+                this.vocab = vocab;
+                this.model = null;
+                this.vocabSize = vocab.nextId;
+                this.sequenceLength = vocab.sequenceLength;
+                this.embeddingDim = CONFIG.EMBEDDING_DIM;
+                this.numHeads = CONFIG.NUM_HEADS;
+                this.transformerLayers = CONFIG.TRANSFORMER_LAYERS;
+                this.learningRate = CONFIG.LEARNING_RATE;
+                this.optimizer = tf.train.adam(this.learningRate);
+            }
+
+            // Simple Multi-Head Attention for demonstration
+            multiHeadAttention(input, headSize, numHeads) {
+                return tf.tidy(() => {
+                    const [batchSize, seqLen, embedDim] = input.shape;
+                    const query = tf.layers.dense({ units: embedDim, useBias: false }).apply(input);
+                    const key = tf.layers.dense({ units: embedDim, useBias: false }).apply(input);
+                    const value = tf.layers.dense({ units: embedDim, useBias: false }).apply(input);
+
+                    const splitHeads = (x) => tf.transpose(tf.reshape(x, [batchSize, seqLen, numHeads, headSize]), [0, 2, 1, 3]);
+
+                    const Q = splitHeads(query);
+                    const K = splitHeads(key);
+                    const V = splitHeads(value);
+
+                    // Scaled Dot-Product Attention (Q @ K^T) / sqrt(d_k)
+                    const matmulQK = tf.matMul(Q, K.transpose([0, 1, 3, 2]));
+                    const scale = 1.0 / Math.sqrt(headSize);
+                    const scaledAttentionLogits = matmulQK.mul(scale);
+
+                    // No masking in this simple demo, but it would go here
+                    const attentionWeights = scaledAttentionLogits.softmax(-1);
+                    const output = tf.matMul(attentionWeights, V);
+
+                    // Recombine heads and linear projection
+                    const outputT = tf.transpose(output, [0, 2, 1, 3]);
+                    const concatOutput = tf.reshape(outputT, [batchSize, seqLen, embedDim]);
+                    return tf.layers.dense({ units: embedDim, useBias: false }).apply(concatOutput);
+                });
+            }
+
+            buildModel() {
+                const inputLayer = tf.input({ shape: [this.sequenceLength - 1] });
+
+                // 1. Embedding Layer
+                let x = tf.layers.embedding({
+                    inputDim: this.vocabSize,
+                    outputDim: this.embeddingDim,
+                    inputLength: this.sequenceLength - 1,
+                }).apply(inputLayer);
+
+                // 2. Transformer Blocks (simplified for a single head size)
+                const headSize = this.embeddingDim / this.numHeads;
+                if (headSize % 1 !== 0) {
+                     showMessage('Model Error', 'Embedding Dimension must be divisible by Number of Attention Heads.');
+                     throw new Error('Invalid model configuration.');
+                }
+
+                for (let i = 0; i < this.transformerLayers; i++) {
+                    const norm1 = tf.layers.layerNormalization().apply(x);
+                    const attnOutput = this.multiHeadAttention(norm1, headSize, this.numHeads);
+                    x = tf.layers.add().apply([x, attnOutput]); // Residual connection
+
+                    const norm2 = tf.layers.layerNormalization().apply(x);
+                    const ffOutput = tf.layers.dense({ units: this.embeddingDim * 4, activation: 'relu' }).apply(norm2);
+                    const ffOutputProj = tf.layers.dense({ units: this.embeddingDim }).apply(ffOutput);
+                    x = tf.layers.add().apply([x, ffOutputProj]); // Residual connection
+                }
+
+                // 3. Final Prediction Layer
+                const finalNorm = tf.layers.layerNormalization().apply(x);
+                // We only need the prediction for the *last* token in the sequence
+                const lastToken = tf.layers.lambda({
+                    func: (tensor) => tf.slice(tensor, [0, tensor.shape[1] - 1, 0], [-1, 1, -1]),
+                    outputShape: (inputShape) => [inputShape[0], 1, inputShape[2]]
+                }).apply(finalNorm);
+                const flattened = tf.layers.flatten().apply(lastToken);
+                const outputLayer = tf.layers.dense({
+                    units: this.vocabSize,
+                    activation: 'softmax'
+                }).apply(flattened);
+
+                this.model = tf.model({ inputs: inputLayer, outputs: outputLayer });
+                this.model.compile({
+                    optimizer: this.optimizer,
+                    loss: 'sparseCategoricalCrossentropy',
+                    metrics: ['accuracy']
+                });
+            }
+
+            async train(sequences, logElement, chart) {
+                if (this.model === null) {
+                    this.buildModel();
+                }
+
+                const inputs = sequences.map(s => s.input);
+                const targets = sequences.map(s => s.target);
+
+                const xs = tf.tensor2d(inputs);
+                const ys = tf.tensor1d(targets, 'int32');
+
+                logElement.innerHTML = `<p class="text-green-700">Starting training on ${inputs.length} samples...</p>`;
+
+                const history = await this.model.fit(xs, ys, {
+                    batchSize: CONFIG.BATCH_SIZE,
+                    epochs: CONFIG.EPOCHS,
                     callbacks: {
-                        onBatchEnd: (batch, logs) => {
-                            if (!isTraining) {
-                                workerModel.stopTraining = true;
-                                return;
-                            }
-                            postMessage({ command: 'BATCH_END', batch: batch, logs: logs });
+                        onEpochEnd: (epoch, logs) => {
+                            const loss = logs.loss.toFixed(4);
+                            const acc = logs.acc.toFixed(4);
+                            const message = `Epoch ${epoch + 1}/${CONFIG.EPOCHS}: Loss=${loss}, Acc=${acc}`;
+                            logElement.innerHTML += `<p>${message}</p>`;
+                            logElement.scrollTop = logElement.scrollHeight; // Scroll to bottom
+
+                            // Update Chart
+                            chart.data.labels.push(`Epoch ${epoch + 1}`);
+                            chart.data.datasets[0].data.push(logs.loss);
+                            chart.update();
                         },
-                        onEpochEnd: async (epoch, logs) => {
-                            if (!isTraining) {
-                                workerModel.stopTraining = true;
-                                return;
-                            }
-                            // Save checkpoint after each epoch
-                            const weightData = await tf.buffer(workerModel.getWeights()[0].shape, 'float32', workerModel.getWeights().map(w => w.dataSync()));
-
-                            // Save checkpoint: taskId, epoch, loss, weight ArrayBuffer
-                            await saveCheckpoint(CONFIG.taskId, epoch + 1, logs.loss, weightData.buffer);
-
-                            console.log(`Epoch ${epoch + 1} complete. Loss: ${logs.loss.toFixed(4)}. Checkpoint saved.`);
-
-                            postMessage({ command: 'EPOCH_END', epoch: epoch, logs: logs });
+                        onTrainEnd: () => {
+                            logElement.innerHTML += `<p class="font-bold text-primary-color">Training complete!</p>`;
                         }
                     }
                 });
 
-                // Only fire COMPLETE if it wasn't stopped manually
-                if (isTraining) {
-                    postMessage({ command: 'COMPLETE' });
-                }
-
-            } catch (e) {
-                if (e.message !== 'model.stopTraining is true.') {
-                    // Manually stopped, not an error
-                    postMessage({ command: 'ERROR', message: e.message });
-                    console.error(e);
-                }
-            } finally {
-                isTraining = false;
-                xTrain.dispose();
-                yTrain.dispose();
-                // We keep the model in memory for generation, so we don't dispose of workerModel
-            }
-        }
-
-
-        // Generation Logic
-        // ======================
-        
-        async function generateWorkerText(data) {
-             if (!workerModel) {
-                 postMessage({ command: 'ERROR', message: 'No model loaded in worker for generation.' });
-                 return;
-             }
-
-             const { inputTokens, sequenceLength, maxNewTokens, temperature, tokenToId, idToToken, UNK_TOKEN_ID } = data;
-             let tokens = [...inputTokens];
-
-             for (let i = 0; i < maxNewTokens; i++) {
-                 // 1. Get the context sequence (last 'sequenceLength' tokens)
-                 const context = tokens.slice(-sequenceLength);
-                 
-                 // Pad or truncate if needed, though inputTokens should be handled by MiniTransformer class
-                 const paddedContext = context.length < sequenceLength 
-                    ? [...Array(sequenceLength - context.length).fill(UNK_TOKEN_ID), ...context]
-                    : context;
-
-                 // 2. Convert to TF tensor
-                 const inputTensor = tf.tensor2d([paddedContext], [1, sequenceLength], 'int32');
-
-                 // 3. Predict next token probabilities
-                 const prediction = workerModel.predict(inputTensor); // [1, vocabSize]
-
-                 // 4. Apply temperature and sample the next token
-                 const logits = tf.squeeze(prediction, [0]); // [vocabSize]
-                 const logitData = logits.dataSync();
-
-                 // Logits to probabilities (with temperature scaling)
-                 let scaledLogits = Array.from(logitData).map(logit => logit / temperature);
-
-                 // Softmax to get probabilities
-                 const maxLogit = Math.max(...scaledLogits);
-                 const expLogits = scaledLogits.map(l => Math.exp(l - maxLogit));
-                 const sumExp = expLogits.reduce((a, b) => a + b, 0);
-                 const probabilities = expLogits.map(l => l / sumExp);
-                 
-                 // Sample the next token index
-                 let nextTokenIndex = -1;
-                 let cumulativeProb = 0;
-                 const randomValue = Math.random();
-
-                 for (let j = 0; j < probabilities.length; j++) {
-                     cumulativeProb += probabilities[j];
-                     if (randomValue < cumulativeProb) {
-                         nextTokenIndex = j;
-                         break;
-                     }
-                 }
-
-                 inputTensor.dispose();
-                 prediction.dispose();
-                 logits.dispose();
-
-                 if (nextTokenIndex !== -1) {
-                     tokens.push(nextTokenIndex);
-                     postMessage({ command: 'TOKEN_GENERATED', token: idToToken.get(nextTokenIndex) });
-                 } else {
-                    // Stop if sampling fails
-                    break;
-                 }
-
-             }
-             
-             postMessage({ command: 'GENERATION_COMPLETE' });
-        }
-
-
-        // Message Handler
-        // ======================
-
-        self.onmessage = async (event) => {
-            const data = event.data;
-
-            if (!tfjsInitialized) {
-                // Initialize TF.js backend if necessary (not always needed in a dedicated worker)
-                await tf.ready();
-                tfjsInitialized = true;
-                postMessage({ command: 'INIT_READY' });
+                xs.dispose();
+                ys.dispose();
+                return history;
             }
 
-            switch (data.command) {
-                case 'START':
-                    trainWorkerModel(data);
-                    break;
-                case 'STOP':
-                    isTraining = false; // Stop the fit loop
-                    break;
-                case 'CHECK_CHECKPOINT':
-                    CONFIG = data.config;
-                    checkExistingCheckpoint();
-                    break;
-                case 'DELETE_CHECKPOINT':
-                    CONFIG = data.config;
-                    deleteCheckpoint(data.taskId);
-                    break;
-                case 'LOAD_MODEL_AND_GENERATE':
-                    CONFIG = data.config;
-                    // Load the model from the checkpoint before generating if not already in memory
-                    if (!workerModel) {
-                        const checkpoint = await loadCheckpoint(CONFIG.taskId);
-                        if (checkpoint) {
-                            createModel(data.vocabSize, CONFIG.SEQUENCE_LENGTH);
-                            const weightData = workerModel.getWeights().map(w => ({ name: w.name, dtype: w.dtype, shape: w.shape }));
-                            const tensors = arrayBufferToWeights(checkpoint.weights, weightData);
-                            workerModel.setWeights(tensors);
-                            tensors.forEach(t => t.dispose()); 
-                            console.log("Model loaded in worker for generation.");
-                        } else {
-                            postMessage({ command: 'ERROR', message: 'No checkpoint found to load model for generation.' });
-                            return;
-                        }
+            async generate(prompt, length = CONFIG.OUTPUT_LENGTH, temperature = CONFIG.TEMPERATURE) {
+                if (!this.model) {
+                    throw new Error("Transformer model not trained or loaded.");
+                }
+
+                let currentSequence = this.vocab.tokenize(prompt)
+                    .map(word => this.vocab.wordToId[word] || this.vocab.wordToId[this.vocab.UNK]);
+
+                let generatedIds = currentSequence.slice(); // Copy initial prompt IDs
+
+                for (let i = 0; i < length; i++) {
+                    let inputIds = currentSequence.slice(-(this.sequenceLength - 1)); // Get the last N-1 tokens
+                    // Pad the input if it's shorter than sequenceLength - 1 (only necessary if prompt is too short)
+                    while (inputIds.length < this.sequenceLength - 1) {
+                        inputIds.unshift(this.vocab.wordToId[this.vocab.PAD]);
                     }
-                    generateWorkerText(data);
-                    break;
+
+                    const inputTensor = tf.tensor2d([inputIds]);
+                    const prediction = this.model.predict(inputTensor);
+
+                    // Apply temperature
+                    const logProbabilities = prediction.log();
+                    const scaledLogits = logProbabilities.div(temperature);
+                    const probabilities = scaledLogits.exp().squeeze(); // Softmax is already applied in the model
+
+                    // Sample the next token
+                    const nextTokenId = await tf.multinomial(probabilities, 1).data();
+                    const nextId = nextTokenId[0];
+
+                    generatedIds.push(nextId);
+                    currentSequence.push(nextId);
+
+                    inputTensor.dispose();
+                    prediction.dispose();
+                    probabilities.dispose();
+                }
+
+                // Convert IDs back to text
+                return this.vocab.idsToText(generatedIds);
             }
-        };
-    </script>
 
-
-    <script>
-        // Global Constants
-        const CONFIG = {
-            // ML Configuration
-            SEQUENCE_LENGTH: 10,
-            UNK_TOKEN: '<UNK>',
-            UNK_TOKEN_ID: 0,
-            MAX_NEW_TOKENS: 100,
-            temperature: 0.8, // Default generation temperature
-            
-            // UI/State
-            taskId: 'mini-transformer-v1', // Unique ID for IndexedDB
-            
-            // Worker/Persistence Configuration
-            MAX_CHECKPOINT_SIZE_MB: 50, // Max size for weights storage
-            DB_NAME: 'LLMTrainingDB',
-            STORE_NAME: 'Checkpoints',
-            train: {
-                epochs: 10, // Default for UI
-                batchSize: 16, // Default for UI
-                learningRate: 0.0005
+            /**
+             * Saves the MiniTransformer model weights to the browser's local storage.
+             */
+            async saveModel() {
+                if (!this.model) {
+                    throw new Error("No model has been trained yet to save.");
+                }
+                const saveResult = await this.model.save(`localstorage://${CONFIG.MODEL_STORAGE_KEY}`);
+                console.log('Model saved result:', saveResult);
+                return saveResult;
             }
-        };
 
-        const state = {
-            mode: 'TRANSFORMER', // 'MARKOV' or 'TRANSFORMER'
-            isTraining: false,
-            isWorkerReady: false,
-            isCheckpointLoaded: false
-        };
+            /**
+             * Loads the MiniTransformer model weights from the browser's local storage.
+             * Also attempts to load the vocabulary from localStorage.
+             */
+            async loadModel() {
+                const modelPath = `localstorage://${CONFIG.MODEL_STORAGE_KEY}`;
+                const vocabJson = localStorage.getItem(`${CONFIG.MODEL_STORAGE_KEY}_vocab`);
 
-        // Global instances (FIX 3: Declaring them globally)
-        let dataHandler;
-        let markovModel;
-        let miniTransformer;
-        let lossChart;
+                if (!vocabJson) {
+                    throw new Error("No saved vocabulary found. Cannot load model structure.");
+                }
+
+                try {
+                    const loadedModel = await tf.loadLayersModel(modelPath);
+
+                    // Reinitialize the MiniTransformer instance with loaded vocab
+                    const loadedVocabData = JSON.parse(vocabJson);
+                    const loadedVocab = new Vocabulary(loadedVocabData.maxVocabSize, loadedVocabData.sequenceLength);
+                    loadedVocab.wordToId = loadedVocabData.wordToId;
+                    loadedVocab.idToWord = loadedVocabData.idToWord;
+                    loadedVocab.nextId = loadedVocabData.nextId;
+
+                    const newModel = new MiniTransformer(loadedVocab);
+                    newModel.model = loadedModel;
+
+                    // Update global state and config
+                    state.tokenizedData = newModel.vocab.textsToSequences(state.rawData || 'placeholder'); // Re-tokenize if raw data exists
+                    state.miniTransformer = newModel;
+                    state.isTrained = true;
+                    state.isTokenized = true;
+                    state.vocabSize = newModel.vocabSize;
+
+                    CONFIG.MAX_VOCAB_SIZE = loadedVocab.maxVocabSize;
+                    CONFIG.SEQUENCE_LENGTH = loadedVocab.sequenceLength;
+                    document.getElementById('max-vocab-size').value = loadedVocab.maxVocabSize;
+                    document.getElementById('sequence-length').value = loadedVocab.sequenceLength;
 
 
-        // Utility Functions
-        // ==========================================================
+                    // Recompile the model to ensure the optimizer state is ready
+                    newModel.model.compile({
+                        optimizer: newModel.optimizer,
+                        loss: 'sparseCategoricalCrossentropy',
+                        metrics: ['accuracy']
+                    });
 
-        /**
-         * FIX 2: Define setWorkerStatus globally for use by MiniTransformer
-         * Updates the UI to reflect the status of the training worker.
-         * @param {string} status - e.g., 'Initializing', 'Ready', 'Training', 'Error'
-         * @param {string} message - A descriptive message
-         */
-        function setWorkerStatus(status, message = '') {
-            const statusElement = document.getElementById('worker-status');
-            if (statusElement) {
-                statusElement.textContent = `Status: ${status}`;
-                // Apply status-specific styling
-                statusElement.className = `status-${status.toLowerCase().replace(/\s/g, '-')}`; 
-                if (message) {
-                    console.log(`[Worker] ${status}: ${message}`);
+                    // Update UI status
+                    document.getElementById('token-status').innerHTML = `
+                        <p class="font-bold text-green-700">Vocabulary Status: Loaded from storage.</p>
+                        <p class="text-xs">Vocab Size: ${newModel.vocabSize}, Seq Length: ${newModel.sequenceLength}</p>
+                    `;
+                    updateStatusDisplay(`Mini-Transformer model and vocabulary loaded successfully!`, 'success');
+                    return loadedModel;
+
+                } catch (e) {
+                    if (e.message.includes('No model found in the requested storage area')) {
+                        throw new Error("No model weights found in the browser's storage.");
+                    }
+                    throw e; // Re-throw other errors
                 }
             }
+
+            /**
+             * Saves the Vocabulary object to local storage alongside the model.
+             */
+            saveVocab() {
+                const vocabData = {
+                    maxVocabSize: this.vocab.maxVocabSize,
+                    sequenceLength: this.vocab.sequenceLength,
+                    wordToId: this.vocab.wordToId,
+                    idToWord: this.vocab.idToWord,
+                    nextId: this.vocab.nextId
+                };
+                localStorage.setItem(`${CONFIG.MODEL_STORAGE_KEY}_vocab`, JSON.stringify(vocabData));
+            }
         }
 
-        /**
-         * Displays a custom, non-blocking alert box.
-         * @param {string} message - The main alert message.
-         * @param {string} title - The title of the alert.
-         * @param {number} duration - Duration in milliseconds.
-         */
-        function showAlert(message, title = 'Notification', duration = 4000) {
-            const box = document.getElementById('alert-box');
-            document.getElementById('alert-box-title').textContent = title;
-            document.getElementById('alert-box-message').textContent = message;
+        // --- Event Handlers & Main Logic ---
 
-            box.classList.add('show');
+        let lossChartInstance = null;
 
-            setTimeout(() => {
-                box.classList.remove('show');
-            }, duration);
-        }
-
-        /**
-         * Initializes the loss chart using Chart.js.
-         */
-        function initializeChart() {
+        function renderLossChart() {
             const ctx = document.getElementById('loss-chart').getContext('2d');
-            lossChart = new Chart(ctx, {
+            if (lossChartInstance) {
+                lossChartInstance.destroy();
+            }
+            lossChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
                         label: 'Training Loss',
                         data: [],
-                        borderColor: var(--primary-blue),
+                        borderColor: 'rgb(26, 115, 232)',
                         backgroundColor: 'rgba(26, 115, 232, 0.1)',
-                        tension: 0.4,
-                        borderWidth: 2,
+                        tension: 0.1,
                         pointRadius: 3
                     }]
                 },
@@ -864,693 +823,351 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Epoch / Batch'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Loss'
-                            },
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
+                        y: { beginAtZero: true, title: { display: true, text: 'Loss' } },
+                        x: { title: { display: true, text: 'Epoch' } }
                     }
                 }
             });
-        }
-        
-        /**
-         * Updates the loss chart with new data points.
-         * @param {number} label - The label for the x-axis (e.g., batch number or epoch number).
-         * @param {number} loss - The loss value.
-         * @param {boolean} isEpochEnd - True if the update is for the end of an epoch.
-         */
-        function updateLossChart(label, loss, isEpochEnd) {
-             const data = lossChart.data.datasets[0].data;
-             const labels = lossChart.data.labels;
-             
-             if (isEpochEnd) {
-                 // On epoch end, clear and show only epoch data or a summary
-                 // For simplicity, we'll append both batch and epoch data, but reset the view
-                 // to focus on the recent points.
-                 // For the prototype, we'll just append.
-                 lossChart.data.datasets[0].borderColor = var(--primary-blue);
-                 lossChart.data.datasets[0].pointRadius = 4;
-             } else {
-                 lossChart.data.datasets[0].borderColor = 'rgba(26, 115, 232, 0.5)';
-                 lossChart.data.datasets[0].pointRadius = 1;
-             }
-             
-             labels.push(label);
-             data.push(loss);
-             
-             // Keep only the last 100 points to prevent memory/performance issues
-             const maxPoints = 100;
-             if (labels.length > maxPoints) {
-                 labels.splice(0, labels.length - maxPoints);
-                 data.splice(0, data.length - maxPoints);
-             }
-             
-             lossChart.update('none'); // 'none' for instant update
-         }
-
-        /**
-         * Resets the loss chart.
-         */
-        function resetLossChart() {
-            lossChart.data.labels = [];
-            lossChart.data.datasets[0].data = [];
-            lossChart.update();
+            document.getElementById('loss-chart-container').classList.remove('hidden');
         }
 
         /**
-         * Toggles the UI elements based on the selected mode.
-         * @param {string} newMode - 'MARKOV' or 'TRANSFORMER'
+         * Parses and loads data from an input string.
+         * @param {string} data
          */
-        function setMode(newMode) {
-            state.mode = newMode;
-            document.getElementById('current-mode').textContent = newMode === 'MARKOV' ? 'Markov Chain' : 'Mini Transformer';
-            
-            const transformerCard = document.getElementById('transformer-train-card');
-            const markovCard = document.getElementById('markov-train-card');
-            const modeMarkovBtn = document.getElementById('mode-markov');
-            const modeTransformerBtn = document.getElementById('mode-transformer');
-            
-            if (newMode === 'TRANSFORMER') {
-                transformerCard.style.display = 'block';
-                markovCard.style.display = 'none';
-                modeTransformerBtn.classList.add('button-primary');
-                modeTransformerBtn.classList.remove('button-secondary');
-                modeMarkovBtn.classList.add('button-secondary');
-                modeMarkovBtn.classList.remove('button-primary');
+        function loadData(data) {
+            state.rawData = data;
+            document.getElementById('raw-data-display').value = data.substring(0, 500) + (data.length > 500 ? '...' : '');
+            updateStatusDisplay(`Data loaded successfully! ${data.length.toLocaleString()} characters. Ready for Tokenization.`, 'info');
+            state.isTokenized = false;
+            state.isTrained = false;
+        }
+
+        // --- Data Ingestion Handlers ---
+
+        document.getElementById('data-drop-zone').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => loadData(e.target.result);
+                reader.onerror = () => showMessage('File Error', 'Could not read the file.');
+                reader.readAsText(file);
+            }
+        });
+
+        document.getElementById('load-sample-btn').addEventListener('click', () => {
+            // Using a well-known sample to keep the application self-contained
+            const sampleText = `The Project Gutenberg EBook of The Adventures of Sherlock Holmes, by Arthur Conan Doyle.
+            This eBook is for the use of anyone anywhere at no cost and with almost no restrictions whatsoever.
+            You may copy it, give it away or re-use it under the terms of the Project Gutenberg License included
+            with this eBook or online at www.gutenberg.org. If you are not located in the United States, you'll
+            have to check the laws of the country where you are located before using this eBook.
+            Title: The Adventures of Sherlock Holmes
+            Author: Arthur Conan Doyle
+            Release Date: November 29, 1990 [eBook #1661]
+            Last Updated: May 20, 2019
+            Language: English
+            The science of deduction is a great one, and should be carefully studied. I was astonished by the sheer
+            simplicity of his methods. 'Data! Data! Data! I can't make bricks without clay.' he cried impatiently.
+            It is a capital mistake to theorize before one has data. Insensibly one begins to twist facts to suit
+            theories, instead of theories to suit facts. He had an immense acquaintance with the minute facts of
+            modern science, and his power of observation was so highly developed that he was able to use it as a
+            weapon against crime. I was always amazed by his ability to connect the smallest detail with the largest
+            conclusion. He never guessed; he always deduced. The game is afoot. We are ready for the chase. We must be
+            quick and stealthy. My mind," he said, "rebels at stagnation. Give me problems, give me work, give me the
+            most abstruse cryptogram, or the most intricate analysis, and I am in my own proper element. I can then
+            dispense with artificial stimulants. But I abhor the dull routine of existence. I crave for mental exaltation.
+            That is why I have chosen my particular profession, or rather created it, for I am, I believe, the only one in the world.
+            Let us go, Watson. The fog is thick and yellow, but the adventure awaits us. The world is full of obvious things
+            which nobody by any chance ever observes. You see, but you do not observe. The distinction is clear. You fail to
+            see what is essential.
+            `;
+            loadData(sampleText);
+        });
+
+        document.getElementById('paste-data-btn').addEventListener('click', () => {
+            document.getElementById('paste-modal').classList.remove('hidden');
+            document.getElementById('paste-modal').classList.add('flex');
+            document.getElementById('manual-data-input').value = '';
+        });
+
+        document.getElementById('cancel-paste-btn').addEventListener('click', () => {
+            document.getElementById('paste-modal').classList.add('hidden');
+            document.getElementById('paste-modal').classList.remove('flex');
+        });
+
+        document.getElementById('submit-paste-btn').addEventListener('click', () => {
+            const data = document.getElementById('manual-data-input').value;
+            if (data.trim().length > 0) {
+                loadData(data);
+                document.getElementById('paste-modal').classList.add('hidden');
+                document.getElementById('paste-modal').classList.remove('flex');
             } else {
-                transformerCard.style.display = 'none';
-                markovCard.style.display = 'block';
-                modeMarkovBtn.classList.add('button-primary');
-                modeMarkovBtn.classList.remove('button-secondary');
-                modeTransformerBtn.classList.add('button-secondary');
-                modeTransformerBtn.classList.remove('button-primary');
+                showMessage('Input Required', 'Please paste some text before loading.');
             }
-        }
-        
-        /**
-         * Updates the temperature value and display.
-         * @param {string} value - The temperature slider value.
-         */
-        function updateTemperature(value) {
-            CONFIG.temperature = parseFloat(value);
-            document.getElementById('temperature-value').textContent = value;
-        }
+        });
 
-        // LLM Models and Logic
-        // ==========================================================
-
-        /**
-         * Handles tokenization, including creating a vocabulary and mapping tokens to IDs.
-         */
-        class DataHandler {
-            constructor(unkToken, unkTokenId) {
-                this.text = "";
-                this.tokens = [];
-                this.vocab = new Map(); // token -> id
-                this.idToToken = new Map(); // id -> token
-                this.unkToken = unkToken;
-                this.unkTokenId = unkTokenId;
+        // --- Tokenization Handler ---
+        document.getElementById('tokenize-btn').addEventListener('click', async () => {
+            if (!state.rawData) {
+                return showMessage('Data Required', 'Please load data in the Data Ingestion tab first.');
             }
+            const btn = document.getElementById('tokenize-btn');
+            toggleLoading(btn, true, 'Tokenizing');
 
-            // Getters
-            getVocabSize() { return this.vocab.size; }
-            getTokens() { return this.tokens; }
+            CONFIG.MAX_VOCAB_SIZE = parseInt(document.getElementById('max-vocab-size').value);
+            CONFIG.SEQUENCE_LENGTH = parseInt(document.getElementById('sequence-length').value);
 
-            /**
-             * Processes the raw text data.
-             */
-            tokenizeData() {
-                this.text = document.getElementById('training-data').value.trim();
-                if (this.text.length === 0) {
-                    showAlert('Please enter some text in the training data field.', 'Data Required');
-                    return;
-                }
+            await tf.nextTick(); // Yield to allow loading spinner to show
 
-                // Simple word-level tokenization (splits on spaces and punctuation)
-                this.tokens = this.text
-                    .toLowerCase()
-                    .replace(/[^a-z0-9\s]/g, ' ') // Replace non-alphanumeric/non-space with space
-                    .replace(/\s+/g, ' ') // Collapse multiple spaces
-                    .trim()
-                    .split(' ');
-                
-                if (this.tokens.length === 0) {
-                     showAlert('Tokenization resulted in no tokens. Please check your data.', 'Tokenization Error');
-                     return;
-                }
+            try {
+                const vocab = new Vocabulary(CONFIG.MAX_VOCAB_SIZE, CONFIG.SEQUENCE_LENGTH);
+                const tokens = vocab.tokenize(state.rawData);
+                const finalVocabSize = vocab.build(tokens);
+                state.tokenizedData = vocab.textsToSequences(state.rawData);
+                state.vocabSize = finalVocabSize;
+                state.isTokenized = true;
 
-                // 1. Build Vocabulary
-                this.vocab.clear();
-                this.idToToken.clear();
-
-                // Start with UNK token
-                this.vocab.set(this.unkToken, this.unkTokenId);
-                this.idToToken.set(this.unkTokenId, this.unkToken);
-
-                let idCounter = this.unkTokenId + 1;
-                this.tokens.forEach(token => {
-                    if (!this.vocab.has(token)) {
-                        this.vocab.set(token, idCounter);
-                        this.idToToken.set(idCounter, token);
-                        idCounter++;
-                    }
-                });
-
-                // 2. Update UI
-                document.getElementById('token-count').textContent = `Tokens: ${this.tokens.length}`;
-                document.getElementById('vocab-size').textContent = `Vocab: ${this.getVocabSize()}`;
-                showAlert(`Tokenization complete! Total Tokens: ${this.tokens.length}, Vocab Size: ${this.getVocabSize()}`, 'Tokenization Success');
+                document.getElementById('token-status').innerHTML = `
+                    <p class="font-bold text-green-700">Vocabulary Status: Tokenization Complete.</p>
+                    <p class="text-xs">Vocab Size: ${finalVocabSize.toLocaleString()} / ${CONFIG.MAX_VOCAB_SIZE.toLocaleString()} max</p>
+                    <p class="text-xs">Sequences for Training: ${state.tokenizedData.length.toLocaleString()}</p>
+                `;
+                updateStatusDisplay('Tokenization complete. Ready for Model Selection.', 'success');
+            } catch (error) {
+                updateStatusDisplay(`Tokenization Error: ${error.message}`, 'error');
+            } finally {
+                toggleLoading(btn, false, '<i class="fas fa-cut mr-2"></i> Run Tokenization');
             }
+        });
 
-            /**
-             * Converts tokens into sequences for Transformer training.
-             * @param {number} sequenceLength - Length of input sequences.
-             * @returns {{inputSequences: number[][], targetTokens: number[]}}
-             */
-            createTrainingSequences(sequenceLength) {
-                const inputSequences = [];
-                const targetTokens = [];
-                const tokenIds = this.tokens.map(token => this.vocab.get(token) || this.unkTokenId);
-
-                // Create sequences of size 'sequenceLength' with the next token as the target
-                for (let i = 0; i < tokenIds.length - sequenceLength; i++) {
-                    const input = tokenIds.slice(i, i + sequenceLength);
-                    const target = tokenIds[i + sequenceLength];
-                    inputSequences.push(input);
-                    targetTokens.push(target);
-                }
-
-                return { inputSequences, targetTokens };
-            }
-        }
-
-        /**
-         * Simple Markov Chain Model.
-         */
-        class MarkovModel {
-            constructor() {
-                this.transitionMatrix = null;
-                this.modelStatusElement = document.getElementById('markov-status');
-            }
-
-            train(tokens) {
-                if (tokens.length < 2) {
-                    showAlert('Training data must have at least two tokens for Markov Chain.', 'Training Error');
-                    this.transitionMatrix = null;
-                    this.updateUI(false);
-                    return;
-                }
-
-                this.transitionMatrix = new Map(); // word -> { next_word -> count }
-
-                for (let i = 0; i < tokens.length - 1; i++) {
-                    const current = tokens[i];
-                    const next = tokens[i + 1];
-
-                    if (!this.transitionMatrix.has(current)) {
-                        this.transitionMatrix.set(current, new Map());
-                    }
-
-                    const nextWords = this.transitionMatrix.get(current);
-                    nextWords.set(next, (nextWords.get(next) || 0) + 1);
-                }
-                
-                this.updateUI(true);
-                showAlert('Markov Model training complete.', 'Training Success');
-            }
-
-            /**
-             * Generates text using the Markov model.
-             * @param {string} prompt - The seed word.
-             * @param {number} maxNewTokens - Max number of tokens to generate.
-             * @returns {string} The generated text.
-             */
-            generate(prompt, maxNewTokens = CONFIG.MAX_NEW_TOKENS) {
-                if (!this.transitionMatrix) {
-                    throw new Error("Markov Model is not trained.");
-                }
-
-                let currentToken = prompt.toLowerCase().trim().split(' ')[0]; // Use the first token of the prompt as seed
-                let generatedTokens = [currentToken];
-
-                for (let i = 0; i < maxNewTokens; i++) {
-                    const nextWordsMap = this.transitionMatrix.get(currentToken);
-
-                    if (!nextWordsMap || nextWordsMap.size === 0) {
-                        break; // Stop if no transitions exist
-                    }
-
-                    // Calculate total count
-                    let totalCount = 0;
-                    for (const count of nextWordsMap.values()) {
-                        totalCount += count;
-                    }
-
-                    // Select the next word based on probability
-                    let randomValue = Math.random() * totalCount;
-                    let cumulativeCount = 0;
-                    let nextToken = null;
-
-                    for (const [word, count] of nextWordsMap.entries()) {
-                        cumulativeCount += count;
-                        if (randomValue < cumulativeCount) {
-                            nextToken = word;
-                            break;
-                        }
-                    }
-
-                    if (nextToken) {
-                        generatedTokens.push(nextToken);
-                        currentToken = nextToken;
-                    } else {
-                        break; // Should not happen if totalCount is calculated correctly
-                    }
-                }
-
-                return generatedTokens.join(' ');
-            }
-            
-            updateUI(isTrained) {
-                 if (isTrained) {
-                     this.modelStatusElement.innerHTML = `Model Status: <span style="color: var(--google-green);">Trained</span>`;
-                 } else {
-                     this.modelStatusElement.innerHTML = `Model Status: <span style="color: var(--google-red);">Untrained</span>`;
-                 }
-            }
-        }
-
-        /**
-         * Mini Transformer Model (Web Worker Interface).
-         */
-        class MiniTransformer {
-            constructor(taskId, config) {
-                this.taskId = taskId;
-                this.config = config;
-                this.isTraining = false;
-                this.worker = null;
-                this.model = null; // Stored model for immediate generation
-                this.epochsTrained = 0;
-
-                this.initializeWorker();
-                this.updateUI(false);
-            }
-            
-            /**
-             * FIX 1: Creates the Web Worker using a Blob URL from the embedded script source.
-             */
-            initializeWorker() {
-                try {
-                    // Get the worker script content from the hidden script tag
-                    const workerScriptSource = document.getElementById('training-worker-source').textContent;
-                    
-                    // Create a Blob from the script content
-                    const blob = new Blob([workerScriptSource], { type: 'application/javascript' });
-                    
-                    // Create a Worker from the Blob URL
-                    const workerUrl = URL.createObjectURL(blob);
-                    this.worker = new Worker(workerUrl);
-
-                    this.worker.onmessage = this.handleWorkerMessage.bind(this);
-                    this.worker.onerror = this.handleWorkerError.bind(this);
-                    
-                    setWorkerStatus('Initializing', 'Web Worker created successfully.');
-
-                    // Check for existing checkpoint immediately
-                    this.checkCheckpoint();
-
-                } catch (e) {
-                    this.handleWorkerError(e);
-                }
-            }
-
-            /**
-             * Handles errors from the Web Worker.
-             */
-            handleWorkerError(event) {
-                const errorMessage = event.message || "An unknown worker error occurred.";
-                setWorkerStatus('Error', errorMessage);
-                showAlert(errorMessage, 'Worker Error');
-                this.updateUI(false); // Ensure buttons are clickable
-            }
-
-            /**
-             * Handles messages coming back from the Web Worker.
-             */
-            handleWorkerMessage(event) {
-                const data = event.data;
-                const trainButton = document.getElementById('train-button');
-                const stopButton = document.getElementById('stop-button');
-
-                switch (data.command) {
-                    case 'INIT_READY':
-                        state.isWorkerReady = true;
-                        setWorkerStatus('Ready', 'Worker is ready for commands.');
-                        break;
-                        
-                    case 'CHECKPOINT_FOUND':
-                        this.epochsTrained = data.metadata.epoch;
-                        state.isCheckpointLoaded = true;
-                        setWorkerStatus('Loaded', `Checkpoint found (Epoch: ${data.metadata.epoch}, Loss: ${data.metadata.loss.toFixed(4)}).`);
-                        this.updateUI(true);
-                        showAlert(`A model checkpoint was found! Trained up to Epoch ${data.metadata.epoch}.`, 'Checkpoint Found');
-                        break;
-                        
-                    case 'CHECKPOINT_NOT_FOUND':
-                        this.epochsTrained = 0;
-                        state.isCheckpointLoaded = false;
-                        setWorkerStatus('Ready', 'No checkpoint found. Starting fresh.');
-                        this.updateUI(false);
-                        break;
-                        
-                    case 'CHECKPOINT_DELETED':
-                        this.epochsTrained = 0;
-                        state.isCheckpointLoaded = false;
-                        setWorkerStatus('Ready', 'Checkpoint deleted.');
-                        this.updateUI(false);
-                        showAlert('Model checkpoint has been deleted.', 'Checkpoint Deleted');
-                        break;
-
-                    case 'BATCH_END':
-                        // data.batch, data.logs.loss
-                        setWorkerStatus('Training', `Batch ${data.batch} Loss: ${data.logs.loss.toFixed(4)}`);
-                        updateLossChart(`Batch ${data.batch}`, data.logs.loss, false);
-                        break;
-
-                    case 'EPOCH_END':
-                        // data.epoch, data.logs.loss
-                        this.epochsTrained = data.epoch + 1;
-                        setWorkerStatus('Training', `Epoch ${data.epoch + 1} Loss: ${data.logs.loss.toFixed(4)}`);
-                        updateLossChart(`Epoch ${data.epoch + 1}`, data.logs.loss, true);
-                        state.isCheckpointLoaded = true; // Training creates a checkpoint
-                        this.updateUI(true);
-                        break;
-
-                    case 'COMPLETE':
-                        this.isTraining = false;
-                        setWorkerStatus('Trained', 'Training completed successfully!');
-                        this.updateUI(true);
-                        showAlert('Mini Transformer finished training.', 'Training Complete', 5000);
-                        break;
-
-                    case 'ERROR':
-                        this.isTraining = false;
-                        setWorkerStatus('Error', data.message);
-                        this.updateUI(state.isCheckpointLoaded); // Keep UI active if a checkpoint exists
-                        showAlert(data.message, 'Training Error');
-                        break;
-                        
-                    // Generation messages
-                    case 'TOKEN_GENERATED':
-                         // This is for streaming output during generation (optional for prototype)
-                         break;
-                    case 'GENERATION_COMPLETE':
-                         // Handled by the await/promise in the main thread
-                         break;
-                }
-            }
-
-            /**
-             * Checks IndexedDB for an existing model checkpoint via the worker.
-             */
-            checkCheckpoint() {
-                 setWorkerStatus('Loading', 'Checking for existing checkpoint...');
-                 this.worker.postMessage({ 
-                    command: 'CHECK_CHECKPOINT', 
-                    config: CONFIG 
-                 });
-            }
-
-            /**
-             * Starts the training process via the Web Worker.
-             */
-            startTraining(epochs, batchSize) {
-                if (!dataHandler.getTokens().length || dataHandler.getVocabSize() < 5) {
-                    showAlert('Please tokenize your training data first, and ensure the vocabulary size is adequate (>4).', 'Data Required');
-                    return;
-                }
-                if (this.isTraining) return;
-
-                this.isTraining = true;
-                this.updateUI(true); // Disable train/delete, enable stop
-
-                const { inputSequences, targetTokens } = dataHandler.createTrainingSequences(CONFIG.SEQUENCE_LENGTH);
-                
-                // Set the current training config in the global CONFIG
-                CONFIG.train.epochs = epochs;
-                CONFIG.train.batchSize = batchSize;
-
-                // Reset chart on new training session (unless resuming)
-                if (this.epochsTrained === 0) {
-                     resetLossChart();
-                }
-
-                setWorkerStatus('Training', `Starting training from Epoch ${this.epochsTrained} for ${epochs} total epochs...`);
-                
-                // Send all necessary data to the worker
-                this.worker.postMessage({
-                    command: 'START',
-                    config: CONFIG,
-                    vocabSize: dataHandler.getVocabSize(),
-                    tokenizerState: {
-                        vocab: Array.from(dataHandler.vocab.entries()),
-                        idToToken: Array.from(dataHandler.idToToken.entries())
-                    },
-                    trainingData: {
-                        inputSequences: inputSequences,
-                        targetTokens: targetTokens
-                    }
-                });
-            }
-
-            /**
-             * Stops the training process via the Web Worker.
-             */
-            stopTraining() {
-                if (!this.isTraining) return;
-                
-                this.worker.postMessage({ command: 'STOP' });
-                this.isTraining = false;
-                setWorkerStatus('Paused', 'Training manually stopped. Checkpoint saved.');
-                this.updateUI(true);
-            }
-            
-            /**
-             * Deletes the model checkpoint from IndexedDB via the worker.
-             */
-            deleteCheckpoint() {
-                 if (this.isTraining) {
-                     showAlert('Stop training before deleting the checkpoint.', 'Action Blocked');
-                     return;
-                 }
-                 this.worker.postMessage({ 
-                    command: 'DELETE_CHECKPOINT', 
-                    taskId: this.taskId,
-                    config: CONFIG // Still send config in case worker needs DB name
-                 });
-            }
-
-            /**
-             * Generates text using the model (interfacing with the worker for model access/generation).
-             * This function returns a Promise that resolves with the final generated text.
-             * @param {string} prompt - The seed text.
-             */
-            generate(prompt) {
-                if (this.isTraining) {
-                    throw new Error("Cannot generate while the model is currently training.");
-                }
-                
-                if (!state.isCheckpointLoaded) {
-                     throw new Error("No trained model found. Please train the Transformer model first.");
-                }
-
-                return new Promise((resolve, reject) => {
-                    // Tokenize the prompt
-                    const promptTokens = prompt.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0);
-                    const inputTokens = promptTokens.map(token => dataHandler.vocab.get(token) || CONFIG.UNK_TOKEN_ID);
-                    
-                    if (inputTokens.length === 0) {
-                        reject(new Error("Prompt contains no recognizable tokens."));
-                        return;
-                    }
-
-                    // Reset the generation buffer in the main thread
-                    let generatedTextBuffer = [...promptTokens];
-                    
-                    const generationListener = (event) => {
-                        const data = event.data;
-                        switch (data.command) {
-                            case 'TOKEN_GENERATED':
-                                generatedTextBuffer.push(data.token);
-                                break;
-                            case 'GENERATION_COMPLETE':
-                                // Clean up listener
-                                this.worker.removeEventListener('message', generationListener);
-                                resolve(generatedTextBuffer.join(' '));
-                                break;
-                            case 'ERROR':
-                                this.worker.removeEventListener('message', generationListener);
-                                reject(new Error(data.message));
-                                break;
-                        }
-                    };
-
-                    // Add a temporary listener for generation
-                    this.worker.addEventListener('message', generationListener);
-                    
-                    // Send generation command to the worker
-                    this.worker.postMessage({
-                        command: 'LOAD_MODEL_AND_GENERATE',
-                        config: CONFIG,
-                        vocabSize: dataHandler.getVocabSize(),
-                        inputTokens: inputTokens,
-                        sequenceLength: CONFIG.SEQUENCE_LENGTH,
-                        maxNewTokens: CONFIG.MAX_NEW_TOKENS,
-                        temperature: CONFIG.temperature,
-                        // Passing maps as arrays for transfer
-                        tokenToId: Array.from(dataHandler.vocab.entries()),
-                        idToToken: Array.from(dataHandler.idToToken.entries()),
-                        UNK_TOKEN_ID: CONFIG.UNK_TOKEN_ID
-                    });
-                });
-            }
-
-            /**
-             * Updates the state of the buttons in the UI.
-             * @param {boolean} checkpointExists - True if a checkpoint is loaded or training.
-             */
-            updateUI(checkpointExists) {
-                const trainButton = document.getElementById('train-button');
-                const stopButton = document.getElementById('stop-button');
-                const deleteButton = document.getElementById('delete-checkpoint-button');
-                
-                if (this.isTraining) {
-                    trainButton.disabled = true;
-                    deleteButton.disabled = true;
-                    stopButton.disabled = false;
+        // --- Model Selection Handlers ---
+        document.querySelectorAll('input[name="llm-mode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                state.mode = e.target.value;
+                const configDiv = document.getElementById('transformer-config');
+                if (state.mode === 'TRANSFORMER') {
+                    configDiv.classList.remove('hidden');
                 } else {
-                    trainButton.disabled = false;
-                    stopButton.disabled = true;
-                    // Only allow delete if a checkpoint exists
-                    deleteButton.disabled = !checkpointExists; 
+                    configDiv.classList.add('hidden');
                 }
+                state.isTrained = false; // Reset training status
+                updateStatusDisplay(`Model changed to ${state.mode}. Please train to continue.`, 'info');
+            });
+        });
+
+        document.getElementById('embedding-dim').addEventListener('input', (e) => CONFIG.EMBEDDING_DIM = parseInt(e.target.value));
+        document.getElementById('num-heads').addEventListener('input', (e) => CONFIG.NUM_HEADS = parseInt(e.target.value));
+        document.getElementById('transformer-layers').addEventListener('input', (e) => CONFIG.TRANSFORMER_LAYERS = parseInt(e.target.value));
+        document.getElementById('learning-rate').addEventListener('input', (e) => CONFIG.LEARNING_RATE = parseFloat(e.target.value));
+
+        // --- Training Handler ---
+        document.getElementById('start-training-btn').addEventListener('click', async () => {
+            if (state.isTraining) return;
+
+            if (!state.isTokenized || !state.tokenizedData || state.tokenizedData.length === 0) {
+                return showMessage('Pre-Requisite Missing', 'Please complete the Data Ingestion and Tokenization steps first.');
             }
-        }
 
+            const btn = document.getElementById('start-training-btn');
+            const logElement = document.getElementById('training-status-log');
+            logElement.innerHTML = '';
+            state.isTraining = true;
+            toggleLoading(btn, true, 'Training');
+            updateStatusDisplay('Training in progress...', 'info');
 
-        // Main Application Functions
-        // ==========================================================
-        
-        /**
-         * Handles the main text generation request.
-         */
-        async function handleGeneration() {
-            const prompt = document.getElementById('prompt-input').value.trim();
-            const outputElement = document.getElementById('output-area');
+            CONFIG.EPOCHS = parseInt(document.getElementById('epochs').value);
+            CONFIG.BATCH_SIZE = parseInt(document.getElementById('batch-size').value);
 
+            await tf.nextTick();
+
+            try {
+                if (state.mode === 'MARKOV') {
+                    logElement.innerHTML = `<p class="text-green-700">Training Markov Chain Model...</p>`;
+                    const vocab = new Vocabulary(CONFIG.MAX_VOCAB_SIZE, CONFIG.SEQUENCE_LENGTH);
+                    vocab.build(vocab.tokenize(state.rawData)); // Ensure vocab is built first
+                    state.markovModel = new MarkovModel(vocab);
+                    state.markovModel.train(state.rawData);
+                    logElement.innerHTML += `<p class="font-bold text-primary-color">Markov Chain Training complete in milliseconds!</p>`;
+
+                } else if (state.mode === 'TRANSFORMER') {
+                    renderLossChart();
+                    const vocab = new Vocabulary(CONFIG.MAX_VOCAB_SIZE, CONFIG.SEQUENCE_LENGTH);
+                    vocab.build(vocab.tokenize(state.rawData));
+                    // Re-instantiate the MiniTransformer with current configs
+                    state.miniTransformer = new MiniTransformer(vocab);
+
+                    // Re-tokenize data based on current config
+                    state.tokenizedData = vocab.textsToSequences(state.rawData);
+
+                    await state.miniTransformer.train(state.tokenizedData, logElement, lossChartInstance);
+                    state.miniTransformer.saveVocab(); // Save vocab after successful training
+                }
+
+                state.isTrained = true;
+                updateStatusDisplay(`${state.mode} Model trained successfully! Ready for Generation.`, 'success');
+
+            } catch (error) {
+                console.error("Training Error:", error);
+                logElement.innerHTML += `<p class="text-red-700">Training Failed: ${error.message}</p>`;
+                updateStatusDisplay(`Training Failed: ${error.message}`, 'error');
+            } finally {
+                state.isTraining = false;
+                toggleLoading(btn, false, '<i class="fas fa-play-circle mr-2"></i> Start Training');
+            }
+        });
+
+        // --- Generation Handler ---
+        document.getElementById('generate-btn').addEventListener('click', async () => {
+            if (!state.isTrained) {
+                return showMessage('Training Required', 'Please train a model in the Training tab first.');
+            }
+            const prompt = document.getElementById('generation-prompt').value.trim();
             if (!prompt) {
-                outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Please enter a prompt.</em>';
-                showAlert('Please enter a prompt in the input field above.', 'Prompt Required');
-                return;
+                return showMessage('Prompt Required', 'Please enter a starting prompt for generation.');
             }
 
-            // Check for required models based on mode
-            if (state.mode === 'TRANSFORMER') {
-                 if (!state.isCheckpointLoaded) {
-                     outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ No trained model found. Please train the Transformer model first.</em>';
-                     showAlert('Please train the Transformer model before generating text.', 'Model Not Trained');
-                     return;
-                 }
-                 if (!dataHandler.getVocabSize()) {
-                     outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Data not tokenized. Please tokenize the training data.</em>';
-                     showAlert('Please tokenize the data before generation.', 'Data Required');
-                     return;
-                 }
-            } else if (state.mode === 'MARKOV' && !markovModel.transitionMatrix) {
-                outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Markov Model is not trained. Please train the model.</em>';
-                showAlert('Please train the Markov Model before generating text.', 'Model Not Trained');
-                return;
-            }
+            const btn = document.getElementById('generate-btn');
+            const outputElement = document.getElementById('generation-output');
+            toggleLoading(btn, true, 'Generating');
+            outputElement.innerHTML = '<div class="text-center p-4"><i class="fas fa-spinner fa-spin text-primary-color text-xl"></i><br><em class="text-secondary-text">Generating text...</em></div>';
 
-            outputElement.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--primary-blue);"></i><br><br><em>Generating text...</em></div>';
+            CONFIG.OUTPUT_LENGTH = parseInt(document.getElementById('output-length').value);
+            CONFIG.TEMPERATURE = parseFloat(document.getElementById('temperature').value);
+
+            await tf.nextTick();
 
             try {
                 let generatedText = "";
                 const startTime = performance.now();
 
                 if (state.mode === 'MARKOV') {
-                    generatedText = markovModel.generate(prompt, CONFIG.MAX_NEW_TOKENS);
-                } else {
-                    // Transformer generation interfaces with the worker
-                    generatedText = await miniTransformer.generate(prompt);
+                    generatedText = state.markovModel.generate(prompt, CONFIG.OUTPUT_LENGTH);
+                } else if (state.mode === 'TRANSFORMER') {
+                    generatedText = await state.miniTransformer.generate(prompt, CONFIG.OUTPUT_LENGTH, CONFIG.TEMPERATURE);
                 }
 
                 const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
 
                 outputElement.innerHTML = `
-                    <div style="background-color: #E8F0FE; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue);">
-                        <strong style="color: var(--primary-blue);">Prompt:</strong> ${prompt}<br>
-                        <small style="color: var(--secondary-text);">Mode: ${state.mode} | Generation Time: ${totalTime}s | Temperature: ${CONFIG.temperature}</small>
+                    <div class="bg-primary-bg p-3 rounded-lg mb-3 border-l-4 border-primary-color">
+                        <strong class="text-primary-color">Prompt:</strong> ${prompt}
+                        <div class="text-xs text-secondary-text mt-1">Mode: ${state.mode} | Time: ${totalTime}s | Temp: ${CONFIG.TEMPERATURE} | Length: ${CONFIG.OUTPUT_LENGTH}</div>
                     </div>
-                    <div style="line-height: 1.8; color: var(--text-color); white-space: pre-wrap;">${generatedText}</div>
+                    <div class="whitespace-pre-wrap leading-relaxed text-sm">${generatedText}</div>
                 `;
+                updateStatusDisplay('Text generation complete.', 'success');
             } catch (error) {
-                outputElement.innerHTML = `<em style="color: var(--google-red);">⚠ Error generating text: ${error.message}</em>`;
-                showAlert(`Generation failed: ${error.message}`, 'Generation Error');
+                console.error("Generation Error:", error);
+                outputElement.innerHTML = `<p class="text-red-700 font-medium">⚠ Generation Error: ${error.message}</p>`;
+                updateStatusDisplay(`Generation Failed: ${error.message}`, 'error');
+            } finally {
+                toggleLoading(btn, false, '<i class="fas fa-magic mr-2"></i> Generate Text');
+            }
+        });
+
+        // --- Persistence Handlers (Save/Load) ---
+
+        document.getElementById('save-model-btn').addEventListener('click', async () => {
+            if (state.mode !== 'TRANSFORMER') {
+                return showMessage('Mode Error', 'Model Persistence only applies to the Mini-Transformer model.');
+            }
+            if (!state.isTrained || !state.miniTransformer) {
+                return showMessage('Training Required', 'Please train a Mini-Transformer model first before saving.');
+            }
+
+            const btn = document.getElementById('save-model-btn');
+            const statusDiv = document.getElementById('persistence-status');
+            toggleLoading(btn, true, 'Saving');
+            statusDiv.innerHTML = `<p class="text-yellow-700 font-medium">Saving model to browser storage...</p>`;
+
+            try {
+                // Save model weights
+                await state.miniTransformer.saveModel();
+                // Save vocabulary (Crucial for model structure)
+                state.miniTransformer.saveVocab();
+
+                statusDiv.innerHTML = `<p class="text-green-700 font-medium"><i class="fas fa-check-circle mr-1"></i> Mini-Transformer model saved successfully!</p>`;
+                updateStatusDisplay('Model saved to local browser storage.', 'success');
+            } catch (error) {
+                console.error("Save Error:", error);
+                statusDiv.innerHTML = `<p class="text-red-700 font-medium">⚠ Save Error: ${error.message}</p>`;
+                updateStatusDisplay(`Save Failed: ${error.message}`, 'error');
+            } finally {
+                toggleLoading(btn, false, '<i class="fas fa-save mr-2"></i> Save Model to Browser');
+            }
+        });
+
+        document.getElementById('load-model-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('load-model-btn');
+            const statusDiv = document.getElementById('persistence-status');
+            toggleLoading(btn, true, 'Loading');
+            statusDiv.innerHTML = `<p class="text-yellow-700 font-medium">Attempting to load model and vocabulary...</p>`;
+
+            try {
+                // We use a dummy vocab object just to call the load method on a new instance
+                const dummyVocab = new Vocabulary(CONFIG.MAX_VOCAB_SIZE, CONFIG.SEQUENCE_LENGTH);
+                const loader = new MiniTransformer(dummyVocab);
+                await loader.loadModel();
+
+                // Successfully loaded model updates state internally in loadModel()
+                statusDiv.innerHTML = `<p class="text-green-700 font-medium"><i class="fas fa-check-circle mr-1"></i> Model and configuration loaded successfully!</p>`;
+
+                // Automatically switch mode to Transformer and open training tab for verification
+                document.querySelector('input[name="llm-mode"][value="TRANSFORMER"]').checked = true;
+                document.getElementById('transformer-config').classList.remove('hidden');
+                state.mode = 'TRANSFORMER';
+                switchTab('training-tab');
+
+            } catch (error) {
+                console.error("Load Error:", error);
+                statusDiv.innerHTML = `<p class="text-red-700 font-medium">⚠ Load Error: ${error.message}</p>`;
+                updateStatusDisplay(`Load Failed: ${error.message}`, 'error');
+            } finally {
+                toggleLoading(btn, false, '<i class="fas fa-upload mr-2"></i> Load Model from Browser');
+            }
+        });
+
+
+        // --- UI/Navigation Logic ---
+
+        function switchTab(targetTabId) {
+            document.querySelectorAll('.tab-page').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(targetTabId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.querySelector(`.tab-item[data-tab="${targetTabId}"]`).classList.add('active');
+
+            // Hide chart when switching away from training tab
+            if (targetTabId !== 'training-tab') {
+                document.getElementById('loss-chart-container').classList.add('hidden');
             }
         }
-        
-        /**
-         * Handles the file upload process (mocked for this prototype).
-         */
-        function handleDataUpload() {
-            // For a real app, this would use an <input type="file"> element.
-            // Mock data for prototype simplicity.
-             const mockData = "The quick brown fox jumps over the lazy dog. A lazy dog barks loudly at the quick brown fox. This is a very small corpus for training, so the resulting text will be simple and repetitive. The fox is fast. The dog is slow.";
-             document.getElementById('training-data').value = mockData;
-             dataHandler.tokenizeData();
-             showAlert('Mock data loaded and tokenized automatically.', 'Data Loaded');
-        }
 
-
-        // Initialization
-        // ==========================================================
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // Initialize global instances
-            dataHandler = new DataHandler(CONFIG.UNK_TOKEN, CONFIG.UNK_TOKEN_ID);
-            markovModel = new MarkovModel();
-            
-            // FIX 3: Instantiate miniTransformer after the DOM is ready and set it globally
-            miniTransformer = new MiniTransformer(CONFIG.taskId, CONFIG);
-
-            // Initialize UI elements
-            initializeChart();
-            setMode(state.mode); // Set initial UI mode
-            updateTemperature(CONFIG.temperature); // Set initial temperature UI
-            
-            // Auto-load mock data and tokenize
-            handleDataUpload();
-            
-            // Set up event listeners that weren't inline
-            document.getElementById('epochs').value = CONFIG.train.epochs;
-            document.getElementById('batch-size').value = CONFIG.train.batchSize;
+        document.querySelectorAll('.tab-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                switchTab(e.currentTarget.dataset.tab);
+            });
         });
+
+        // Initialize on load
+        window.onload = () => {
+            // Set initial state and show first tab
+            switchTab('data-ingestion-tab');
+            document.getElementById('transformer-config').classList.add('hidden');
+            updateStatusDisplay('Welcome! Load data to begin.');
+        };
 
     </script>
 </body>
 </html>
+
 
