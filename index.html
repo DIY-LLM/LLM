@@ -507,11 +507,13 @@
                     type: 'answer',
                     sdp: data.sdp
                 }));
-                submitAnswerBtn.textContent = '✓ Connected!';
+                submitAnswerBtn.textContent = 'Connecting...';
                 submitAnswerBtn.disabled = true;
+                updateStatus('waiting', 'Establishing connection...');
             } catch (e) {
                 alert('Invalid answer code. Please check and try again.');
                 console.error(e);
+                submitAnswerBtn.disabled = false;
             }
         });
 
@@ -573,33 +575,58 @@
             };
             
             peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state changed to:', peerConnection.connectionState);
+                console.log('ICE connection state:', peerConnection.iceConnectionState);
+                console.log('ICE gathering state:', peerConnection.iceGatheringState);
+                
                 if (peerConnection.connectionState === 'connected') {
+                    console.log('WebRTC connection established');
                     updateStatus('connected', 'Connected & Encrypted');
                     setupArea.classList.add('hidden');
                     chatArea.classList.add('active');
+                    messageInput.focus();
                 } else if (peerConnection.connectionState === 'disconnected' || 
                            peerConnection.connectionState === 'failed') {
                     updateStatus('disconnected', 'Disconnected');
+                    console.error('Connection failed or disconnected');
+                } else if (peerConnection.connectionState === 'connecting') {
+                    updateStatus('waiting', 'Connecting...');
                 }
             };
         }
 
         // Setup Data Channel
         function setupDataChannel() {
+            console.log('Setting up data channel, current state:', dataChannel.readyState);
+            
             dataChannel.onopen = () => {
+                console.log('Data channel opened!');
                 updateStatus('connected', 'Connected & Encrypted');
                 setupArea.classList.add('hidden');
                 chatArea.classList.add('active');
+                messageInput.focus();
             };
             
             dataChannel.onclose = () => {
+                console.log('Data channel closed');
                 updateStatus('disconnected', 'Disconnected');
+                alert('Connection lost. Please refresh to start a new session.');
+            };
+            
+            dataChannel.onerror = (error) => {
+                console.error('Data channel error:', error);
             };
             
             dataChannel.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 addMessage(data.text, false, data.time);
             };
+
+            // If channel is already open, trigger the open handler
+            if (dataChannel.readyState === 'open') {
+                console.log('Data channel already open');
+                dataChannel.onopen();
+            }
         }
 
         // Send Message
