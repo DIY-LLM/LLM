@@ -1,1474 +1,668 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DIY LLM Toolkit | Modular Prototype</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1520.0/aws-sdk.min.js"></script>
-    
+    <title>P2P Chat - Decentralized Messaging</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        /* --- Google Cloud/Material Design Variables --- */
-        :root {
-            --primary-blue: #1A73E8;
-            --header-blue: #1A2E44;
-            --nav-panel-color: #F1F3F4;
-            --active-item-color: #E8F0FE;
-            --surface-color: #FFFFFF;
-            --background-color: #F8F9FA;
-            --text-color: #202124;
-            --secondary-text: #5F6368;
-            --border-color: #DADCE0;
-            --google-red: #DB4437;
-            --google-green: #0F9D58;
-            --elevation-low: 0 1px 2px 0 rgba(0,0,0,0.1), 0 1px 3px 0 rgba(0,0,0,0.06);
-            --elevation-mid: 0 2px 4px 0 rgba(0,0,0,0.1), 0 2px 5px 0 rgba(0,0,0,0.08);
-        }
-        /* --- Base Layout --- */
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: var(--background-color);
-            color: var(--text-color);
+        * {
             margin: 0;
             padding: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        .top-header {
-            background-color: var(--header-blue);
-            color: var(--surface-color);
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            box-shadow: var(--elevation-low);
-            z-index: 10;
-        }
-        .top-header h1 { font-size: 1.5em; font-weight: 400; margin: 0 30px 0 10px; white-space: nowrap; }
-        .top-header h1 i { color: #4285F4; margin-right: 8px; }
-        .main-content-area { display: flex; flex-grow: 1; }
-        .side-nav {
-            width: 250px;
-            background-color: var(--surface-color);
-            border-right: 1px solid var(--border-color);
-            padding: 15px 0;
-            flex-shrink: 0;
-        }
-        .nav-item { padding: 10px 20px; color: var(--secondary-text); font-size: 0.95em; cursor: pointer; transition: background-color 0.2s; }
-        .nav-item.active { background-color: var(--active-item-color); color: var(--primary-blue); border-left: 3px solid var(--primary-blue); font-weight: 500; padding-left: 17px; }
-        .nav-item i { margin-right: 12px; font-size: 1.1em; width: 20px; text-align: center; }
-        .content-wrapper { flex-grow: 1; padding: 30px; max-width: 1000px; }
-        h2 { color: var(--text-color); font-weight: 500; font-size: 1.6em; margin-top: 0; margin-bottom: 20px; }
-        .divider { margin: 30px 0; border: none; border-top: 1px solid var(--border-color); }
-        
-        /* Model Mode Toggle */
-        .mode-toggle {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding: 10px 15px;
-            background-color: var(--surface-color);
-            border-radius: 8px;
-            box-shadow: var(--elevation-low);
-            border-left: 4px solid var(--primary-blue);
-        }
-        .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--google-green); }
-        input:checked + .slider:before { transform: translateX(26px); }
-        .mode-label { font-weight: 500; margin-right: 15px; color: var(--primary-blue); }
-        .mode-label span { color: var(--secondary-text); font-weight: 400; font-size: 0.9em;}
-        
-        /* Model Controls Panel */
-        #model-controls-panel {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            padding: 20px;
-            background-color: var(--surface-color);
-            border-radius: 8px;
-            box-shadow: var(--elevation-low);
-            margin-bottom: 20px;
-        }
-        .control-group label { display: block; font-size: 0.85em; color: var(--secondary-text); margin-bottom: 5px; }
-        .control-group input[type="number"], .control-group select {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
             box-sizing: border-box;
-            font-size: 0.9em;
-            color: var(--text-color);
         }
-        
-        /* Dashboard */
-        #model-dashboard {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
-            margin-top: 30px;
-        }
-        #chart-container {
-            background-color: var(--surface-color);
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: var(--elevation-low);
         }
-        #metrics-panel {
-            background-color: var(--surface-color);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: var(--elevation-low);
-            border-left: 4px solid var(--google-green);
-        }
-        #metrics-panel h3 { margin-top: 0; color: var(--google-green); font-weight: 500; font-size: 1.2em; }
-        .metric-item { margin-bottom: 10px; font-size: 0.95em; }
-        .metric-item strong { display: block; font-size: 1.1em; color: var(--text-color); }
-        
-        /* Data Analytics Dashboard */
-        #data-analytics-dashboard {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .dashboard-card {
-            background-color: var(--surface-color);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: var(--elevation-low);
-        }
-        .dashboard-card h3 { 
-            margin-top: 0; 
-            font-size: 1.2em; 
-            color: var(--primary-blue);
-        }
-        /* Heatmap styles */
-        #transition-heatmap-content {
-            overflow-x: auto;
-            max-height: 350px;
-        }
-        #transition-heatmap-content table {
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
             width: 100%;
-            border-collapse: collapse;
-            font-size: 0.75em;
-            table-layout: fixed;
-        }
-        #transition-heatmap-content th, #transition-heatmap-content td {
-            border: 1px solid #eee;
-            padding: 5px;
-            text-align: center;
-            transition: background-color 0.3s;
             overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            height: 30px;
         }
-        #transition-heatmap-content th {
-            background-color: #f7f7f7;
-            font-weight: 500;
-        }
-        .heatmap-cell {
-            cursor: default;
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            font-weight: 500;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            overflow: hidden;
+            padding: 25px;
+            text-align: center;
         }
-        
-        /* Component Styles */
-        .data-source-card, #matrix-output { background-color: var(--surface-color); border-radius: 8px; box-shadow: var(--elevation-low); padding: 20px; transition: box-shadow 0.3s; }
-        .data-source-tabs { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
-        .data-source-card { flex: 1 1 300px; text-align: center; cursor: pointer; }
-        .data-source-card:hover { box-shadow: var(--elevation-mid); }
-        button { background-color: var(--primary-blue); color: var(--surface-color); border: none; padding: 10px 20px; font-size: 14px; font-weight: 500; text-transform: capitalize; cursor: pointer; border-radius: 4px; transition: background-color 0.3s, box-shadow 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        button:hover { background-color: #3B7DD1; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        textarea { border: 1px solid var(--border-color); border-radius: 4px; padding: 12px; height: 120px; margin-bottom: 20px; width: 100%; box-sizing: border-box; font-family: 'Roboto', sans-serif; font-size: 1em; color: var(--text-color); background-color: var(--surface-color); }
-        .upload-container { border: 2px dashed var(--border-color); background-color: var(--surface-color); border-radius: 8px; padding: 30px; text-align: center; margin-top: 20px; transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s; cursor: pointer; position: relative; }
-        .upload-container:hover { border-color: var(--primary-blue); background-color: #F8F9FA; box-shadow: var(--elevation-low); }
-        .upload-container.drag-over { background-color: #E8F0FE; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(26,115,232,0.2); }
-        .upload-container i.fa-file-import { font-size: 3em; color: var(--primary-blue); margin-bottom: 15px; display: block; }
-        #file-analytics-card { margin-top: 20px; background-color: var(--surface-color); border-radius: 8px; box-shadow: var(--elevation-low); padding: 20px; border-left: 4px solid var(--google-green); }
-        .progress-bar-container { width: 100%; background-color: #eee; border-radius: 4px; margin-top: 15px; overflow: hidden; display: none; align-items: center; height: 35px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); position: relative; }
-        #llm-output { padding: 20px; border: 1px solid var(--border-color); background-color: #F1F3F4; margin-top: 20px; color: var(--text-color); line-height: 1.6; border-radius: 8px; min-height: 100px; }
-        .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary-blue) 0%, #4285F4 100%); width: 0%; text-align: center; line-height: 35px; color: white; font-size: 12px; font-weight: 500; transition: width 0.3s ease-out; border-radius: 4px 0 0 4px; white-space: nowrap; overflow: hidden; padding: 0 10px; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .progress-bar-container button { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); z-index: 2; background-color: var(--google-red); padding: 5px 10px; font-size: 0.8em; box-shadow: 0 1px 2px rgba(0,0,0,0.2); margin-left: auto; }
-        .training-status { background-color: #E8F0FE; border-left: 4px solid var(--primary-blue); padding: 12px 15px; border-radius: 4px; margin: 15px 0; font-size: 0.9em; display: none; }
-        .training-status.active { display: block; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-        .aws-config-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
-        .aws-config-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 500px; width: 90%; }
-        .aws-config-content h3 { margin-top: 0; color: var(--primary-blue); }
-        .aws-config-content input { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; }
-        .aws-config-content label { display: block; font-weight: 500; font-size: 0.9em; color: var(--secondary-text); margin-top: 10px; }
-        #file-preview { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px dashed var(--border-color); }
-        .file-item { background-color: #F1F3F4; border: 1px solid #DADCE0; border-radius: 16px; padding: 6px 12px; font-size: 0.85em; white-space: nowrap; color: var(--secondary-text); display: flex; align-items: center; gap: 6px; transition: background-color 0.2s, box-shadow 0.2s; cursor: default; }
-        .file-item:hover { background-color: #E8F0FE; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .file-item i.fa-file-alt { color: var(--primary-blue); }
-        .file-item .remove-file { color: var(--secondary-text); cursor: pointer; font-size: 0.9em; margin-left: 5px; transition: color 0.2s; }
-        .file-item .remove-file:hover { color: var(--google-red); }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .status {
+            padding: 15px 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+        }
+
+        .status-dot.waiting {
+            background: #ffc107;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .peer-id {
+            font-size: 11px;
+            color: #6c757d;
+            font-family: monospace;
+        }
+
+        .main-content {
+            padding: 25px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .qr-container {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        #qrcode {
+            display: inline-block;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .connection-url {
+            font-size: 11px;
+            word-break: break-all;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+
+        .chat-area {
+            display: none;
+            flex-direction: column;
+            height: 400px;
+        }
+
+        .chat-area.active {
+            display: flex;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.sent {
+            text-align: right;
+        }
+
+        .message-bubble {
+            display: inline-block;
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .message.received .message-bubble {
+            background: white;
+            color: #212529;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message.sent .message-bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message-time {
+            font-size: 10px;
+            opacity: 0.6;
+            margin-top: 5px;
+        }
+
+        .message-input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input-area input {
+            margin-bottom: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .setup-area {
+            display: block;
+        }
+
+        .setup-area.hidden {
+            display: none;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #495057;
+            margin-bottom: 20px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #495057;
+            margin-bottom: 20px;
+        }
+
+        .step-indicator {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border-left: 4px solid #28a745;
+        }
+
+        .step-indicator h3 {
+            font-size: 14px;
+            color: #28a745;
+            margin-bottom: 8px;
+        }
+
+        .step-indicator p {
+            font-size: 13px;
+            color: #495057;
+            line-height: 1.5;
+        }
+
+        .code-box {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 10px 0;
+            max-height: 150px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
-<div class="top-header">
-    <i class="fas fa-bars" style="margin-right: 20px; font-size: 1.2em;"></i>
-    <h1><i class="fas fa-brain"></i> DIY LLM Toolkit</h1>
-    <div class="top-header-search">
-        <i class="fas fa-search"></i>
-        Search the Knowledge Base...
-    </div>
-    <i class="fas fa-question-circle" style="margin-left: auto; margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
-    <i class="fas fa-bell" style="margin-right: 15px; color: rgba(255, 255, 255, 0.7);"></i>
-    <div style="width: 30px; height: 30px; background-color: #A0C3FF; border-radius: 50%;"></div>
-</div>
-<div class="main-content-area">
-    <div class="side-nav">
-        <div class="nav-item"> <i class="fas fa-home"></i> Overview </div>
-        <div class="nav-item active"> <i class="fas fa-database"></i> Data & Tokenization </div>
-        <div class="nav-item"> <i class="fas fa-chart-line"></i> Analytics & Metrics </div>
-        <div class="nav-item"> <i class="fas fa-cogs"></i> Model Training </div>
-        <div class="nav-item"> <i class="fas fa-robot"></i> Text Generation </div>
-    </div>
-    <div class="content-wrapper">
-        <p style="font-size: 0.95em; margin-bottom: 25px;">A modular prototype for training lightweight LLMs, supporting Markov chain fallback and TensorFlow-based attention simulation.</p>
-        <div class="mode-toggle">
-            <div class="mode-label" id="current-mode-label">
-                Current Mode: <strong id="model-mode-name">Markov Chain (Fallback)</strong>
-                <br><span>(Switch to Transformer for vector-based generation)</span>
-            </div>
-            <label class="toggle-switch">
-                <input type="checkbox" id="model-mode-toggle" onchange="toggleModelMode(this.checked)">
-                <span class="slider"></span>
-            </label>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 P2P Secure Chat</h1>
+            <p>Decentralized • No Servers • Private</p>
         </div>
-        <section id="data-ingestion-section">
-            <h2>Data Ingestion & Tokenization</h2>
-            
-            <div class="data-source-tabs">
-                <div class="data-source-card">
-                    <h3>Local Files</h3>
-                    <i class="fas fa-upload" style="color: var(--primary-blue); font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Drag, drop, or select multiple local files for instant processing.</p>
-                    <label class="upload-label" for="file-input">Select Local Files</label>
-                </div>
-                <div class="data-source-card" onclick="showAwsConfigModal()">
-                    <h3>AWS S3 Storage</h3>
-                    <i class="fab fa-aws" style="color: #FF9900; font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em; font-weight: 500;">Connect to an AWS S3 bucket to stream training data.</p>
-                    <button style="background-color: #FF9900;" onclick="event.stopPropagation(); showAwsConfigModal();">
-                        <i class="fas fa-link"></i> Connect S3 Bucket
-                    </button>
-                </div>
-                <div class="data-source-card">
-                    <h3>Sample Dataset</h3>
-                    <i class="fas fa-book" style="color: #9334E9; font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Load a sample text corpus for quick testing.</p>
-                    <button onclick="loadSampleData()" style="background-color: #9334E9;">
-                        <i class="fas fa-file-alt"></i> Load Sample Text
-                    </button>
-                </div>
-                <div class="data-source-card">
-                    <h3>Kaggle Dataset</h3>
-                    <i class="fas fa-cloud-download-alt" style="color: var(--google-green); font-size: 2.5em; margin-bottom: 16px;"></i>
-                    <p style="font-size: 0.9em;">Pull data directly from a public Kaggle dataset via API.</p>
-                    <button onclick="showAlert('Integration logic for Kaggle data pull goes here.')" style="background-color: var(--google-green);">
-                        <i class="fas fa-download"></i> Fetch from Kaggle
-                    </button>
-                </div>
+
+        <div class="status">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
             </div>
-            <div class="upload-container" id="drop-zone">
-                 <i class="fas fa-file-import"></i>
-                 <p>Drop files here or paste below to train the model.</p>
-                 <input type="file" id="file-input" multiple accept=".txt,.csv,.md">
-            </div>
-            <div id="file-analytics-card">
-                <h3>Uploaded Files Overview</h3>
-                <div id="file-analytics-summary">0 Files Uploaded (0.0 MB)</div>
-                <div id="progress-container" class="progress-bar-container">
-                    <div id="progress-bar" class="progress-bar">0%</div>
-                    <button onclick="cancelStreaming()"><i class="fas fa-times"></i> Cancel</button>
+            <div class="peer-id" id="peerId"></div>
+        </div>
+
+        <div class="main-content">
+            <div class="setup-area" id="setupArea">
+                <div class="info-box">
+                    ℹ️ This chat uses WebRTC for direct peer-to-peer connections. No data passes through servers. Two people need to exchange connection codes to connect.
                 </div>
-                <div id="file-preview"></div>
-                <div style="margin-top: 15px;">
-                    <button onclick="tokenizer.exportVocabulary()" style="background-color: #5F6368;"><i class="fas fa-download"></i> Export Vocab</button>
+
+                <div class="section">
+                    <h2>Option 1: Start a New Chat Room</h2>
+                    <button class="btn-primary" id="createRoom">Create Room</button>
+                    
+                    <div id="hostInstructions" class="hidden">
+                        <div class="step-indicator">
+                            <h3>📤 Step 1: Share Your Offer Code</h3>
+                            <p>Copy the code below and send it to your friend (via Signal, WhatsApp, email, etc.)</p>
+                        </div>
+                        <div class="code-box" id="offerCode"></div>
+                        <button class="btn-secondary" id="copyOffer">Copy Offer Code</button>
+
+                        <div class="qr-container">
+                            <p style="font-weight: 600; margin-bottom: 10px;">Or scan this QR code:</p>
+                            <div id="qrcode"></div>
+                        </div>
+
+                        <div class="step-indicator" style="margin-top: 20px;">
+                            <h3>📥 Step 2: Wait for Answer Code</h3>
+                            <p>Your friend will join using your code and get an "answer code". Paste it here when they send it to you:</p>
+                        </div>
+                        <textarea id="answerInput" placeholder="Paste the answer code from your friend here..."></textarea>
+                        <button class="btn-success" id="submitAnswer">Connect</button>
+                    </div>
                 </div>
-            </div>
-            <textarea id="text-input" placeholder="... or paste your text corpus directly here."></textarea>
-            
-            <div style="display: flex; gap: 15px; justify-content: flex-start; margin-bottom: 30px;">
-                <button onclick="dataHandler.tokenizeAndBuildMatrix()"><i class="fas fa-list-ol"></i> Tokenize & Preprocess</button>
-                <button onclick="miniTransformer.trainOnText()" id="train-button" style="background-color: #3C769D;"><i class="fas fa-bolt"></i> Train Model</button>
-            </div>
-            
-            <div class="training-status" id="training-status">
-                <i class="fas fa-spinner fa-spin"></i> Training in progress... <span id="training-progress-text">Epoch 0/0</span>
-            </div>
-            
-        </section>
-        <hr class="divider">
-        <section id="data-analytics-section" style="display: none;">
-            <h2>Data Analytics & Visualization</h2>
-            <p style="font-size: 0.9em; margin-bottom: 25px;">These charts update after running the "Tokenize & Preprocess" step.</p>
-            <div id="data-analytics-dashboard">
-                <div id="token-chart-container" class="dashboard-card">
-                    <h3><i class="fas fa-chart-bar"></i> Top 10 Token Frequency</h3>
-                    <canvas id="tokenChart"></canvas>
-                </div>
-                <div id="heatmap-container" class="dashboard-card">
-                    <h3><i class="fas fa-th-large"></i> Transition/Attention Heatmap</h3>
-                    <div id="transition-heatmap-content">
-                        <em>Run tokenization to view Markov transition probabilities.</em>
+
+                <div class="section">
+                    <h2>Option 2: Join Existing Room</h2>
+                    <div class="step-indicator">
+                        <h3>📥 Paste Offer Code</h3>
+                        <p>Paste the offer code you received from your friend:</p>
+                    </div>
+                    <textarea id="joinInput" placeholder="Paste offer code here..."></textarea>
+                    <button class="btn-success" id="joinRoom">Join Room</button>
+
+                    <div id="joinerInstructions" class="hidden">
+                        <div class="warning-box">
+                            ⚠️ <strong>Important:</strong> Copy the answer code below and send it back to your friend. They need to paste it to complete the connection!
+                        </div>
+                        <div class="code-box" id="answerCode"></div>
+                        <button class="btn-secondary" id="copyAnswer">Copy Answer Code</button>
+                        <div class="step-indicator" style="margin-top: 20px;">
+                            <h3>⏳ Waiting for Connection...</h3>
+                            <p>Once your friend pastes your answer code, the connection will be established automatically.</p>
+                        </div>
                     </div>
                 </div>
             </div>
-            <hr class="divider">
-        </section>
-        <section id="model-section">
-            <h2>Model Configuration & Execution</h2>
-            <div id="model-controls-panel">
-                <div class="control-group">
-                    <label for="max-tokens-input">Max Tokens (Inference)</label>
-                    <input type="number" id="max-tokens-input" value="50" min="10">
-                </div>
-                <div class="control-group">
-                    <label for="temperature-input">Temperature (Sampling)</label>
-                    <input type="number" id="temperature-input" value="0.7" step="0.1" min="0.1" max="2.0">
-                </div>
-                <div class="control-group">
-                    <label for="embedding-size-input">Embedding Dim (d_model)</label>
-                    <input type="number" id="embedding-size-input" value="128" min="16">
-                </div>
-                <div class="control-group">
-                    <label for="epochs-input">Epochs (Training)</label>
-                    <input type="number" id="epochs-input" value="20" min="1">
-                </div>
-                <div class="control-group">
-                    <label for="batch-size-input">Batch Size (Training)</label>
-                    <input type="number" id="batch-size-input" value="16" min="1">
-                </div>
-                <div class="control-group">
-                    <label for="learning-rate-input">Learning Rate</label>
-                    <input type="number" id="learning-rate-input" value="0.0005" step="0.0001" min="0.0001">
-                </div>
-            </div>
-            
-            <div id="model-dashboard">
-                <div id="chart-container">
-                    <h3><i class="fas fa-chart-area"></i> Live Loss Curve</h3>
-                    <canvas id="lossChart"></canvas>
-                </div>
-                <div id="metrics-panel">
-                    <h3><i class="fas fa-tachometer-alt"></i> Model Metrics</h3>
-                    <div class="metric-item">Current Loss: <strong id="metric-loss">N/A</strong></div>
-                    <div class="metric-item">Epochs Run: <strong id="metric-epochs">0</strong></div>
-                    <div class="metric-item">Vocab Size: <strong id="metric-vocab-size">0</strong></div>
-                    <div class="metric-item">Inference Latency: <strong id="metric-latency">N/A</strong></div>
-                    <div class="metric-item">Memory Footprint: <strong id="metric-memory">0 MB</strong></div>
-                    <button onclick="miniTransformer.saveModel()" style="margin-top: 15px;"><i class="fas fa-save"></i> Save Model Weights</button>
-                    <button onclick="miniTransformer.loadModel()" style="margin-top: 10px; background-color: #5F6368;"><i class="fas fa-file-upload"></i> Load Model Weights</button>
-                </div>
-            </div>
-        </section>
-        <hr class="divider">
-        <section id="generation-section">
-            <h2>Text Generation</h2>
-            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                <input type="text" id="prompt-input" placeholder="Enter your prompt word or sentence here..." style="flex-grow: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px;">
-                <button onclick="generateTextFromModel()"><i class="fas fa-magic"></i> Generate Text</button>
-            </div>
-            
-            <div id="llm-output">
-                <em>Generated text will appear here. Start by tokenizing and training your model.</em>
-            </div>
-        </section>
-    </div>
-</div>
-<div id="custom-alert" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
-    <div style="background: white; padding: 25px; border-radius: 8px; box-shadow: var(--elevation-mid); max-width: 400px;">
-        <h3 id="alert-title" style="margin-top: 0; color: var(--primary-blue);">Alert</h3>
-        <p id="alert-message"></p>
-        <button onclick="document.getElementById('custom-alert').style.display='none'" style="float: right;">OK</button>
-    </div>
-</div>
 
-<!-- AWS S3 Configuration Modal -->
-<div id="aws-config-modal" class="aws-config-modal">
-    <div class="aws-config-content">
-        <h3><i class="fab fa-aws"></i> AWS S3 Configuration</h3>
-        <p style="font-size: 0.9em; color: var(--secondary-text);">Enter your AWS credentials to connect to S3. Your credentials are stored locally and never sent to external servers.</p>
-        
-        <label for="aws-region">AWS Region</label>
-        <input type="text" id="aws-region" placeholder="us-east-1" value="us-east-1">
-        
-        <label for="aws-access-key">Access Key ID</label>
-        <input type="text" id="aws-access-key" placeholder="AKIAIOSFODNN7EXAMPLE">
-        
-        <label for="aws-secret-key">Secret Access Key</label>
-        <input type="password" id="aws-secret-key" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
-        
-        <label for="aws-bucket">Bucket Name</label>
-        <input type="text" id="aws-bucket" placeholder="my-training-data-bucket">
-        
-        <label for="aws-prefix">Prefix/Folder (Optional)</label>
-        <input type="text" id="aws-prefix" placeholder="datasets/">
-        
-        <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
-            <button onclick="closeAwsConfigModal()" style="background-color: #5F6368;">Cancel</button>
-            <button onclick="connectAwsS3()" style="background-color: #FF9900;"><i class="fas fa-link"></i> Connect</button>
+            <div class="chat-area" id="chatArea">
+                <div class="messages" id="messages"></div>
+                <div class="message-input-area">
+                    <input type="text" id="messageInput" placeholder="Type a message...">
+                    <button class="btn-primary" id="sendBtn">Send</button>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
-<script>
-    // Configuration
-    const CONFIG = {
-        modelMode: 'MARKOV',
-        maxTokens: 50, // Reduced for better output
-        temperature: 0.7, // Lower temperature for more focused generation
-        embeddingDim: 128, // Increased for better representation
-        numHeads: 4,
-        ffnDim: 256, // Increased FFN dimension
-        train: {
-            epochs: 20, // More epochs for better learning
-            batchSize: 16, // Smaller batch for better gradients
-            learningRate: 0.0005 // Lower learning rate for stability
-        }
-    };
-    
-    const SEQUENCE_LENGTH = 10;
-    const UNK_TOKEN_ID = 0;
-    let lossChart = null;
-    let tokenChart = null;
-    let currentStreamController = null;
-    
-    // Utility Functions
-    function showAlert(message, title = 'Notification') {
-        document.getElementById('alert-title').textContent = title;
-        document.getElementById('alert-message').innerHTML = message;
-        document.getElementById('custom-alert').style.display = 'flex';
-    }
-    
-    function initializeLossChart() {
-        const ctx = document.getElementById('lossChart').getContext('2d');
-        if (lossChart) lossChart.destroy();
-        lossChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Training Loss',
-                    data: [],
-                    borderColor: 'rgb(26, 115, 232)',
-                    backgroundColor: 'rgba(26, 115, 232, 0.1)',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Loss' } },
-                    x: { title: { display: true, text: 'Epoch' } }
-                }
-            }
+    <script>
+        // WebRTC Configuration
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        let peerConnection = null;
+        let dataChannel = null;
+        let isInitiator = false;
+
+        // DOM Elements
+        const createRoomBtn = document.getElementById('createRoom');
+        const joinRoomBtn = document.getElementById('joinRoom');
+        const submitAnswerBtn = document.getElementById('submitAnswer');
+        const joinInput = document.getElementById('joinInput');
+        const answerInput = document.getElementById('answerInput');
+        const hostInstructions = document.getElementById('hostInstructions');
+        const joinerInstructions = document.getElementById('joinerInstructions');
+        const offerCode = document.getElementById('offerCode');
+        const answerCode = document.getElementById('answerCode');
+        const copyOfferBtn = document.getElementById('copyOffer');
+        const copyAnswerBtn = document.getElementById('copyAnswer');
+        const setupArea = document.getElementById('setupArea');
+        const chatArea = document.getElementById('chatArea');
+        const messages = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const peerId = document.getElementById('peerId');
+
+        // Generate random peer ID
+        const myPeerId = 'peer-' + Math.random().toString(36).substr(2, 9);
+        peerId.textContent = myPeerId;
+
+        // Create Room (Host)
+        createRoomBtn.addEventListener('click', async () => {
+            isInitiator = true;
+            createRoomBtn.disabled = true;
+            await initializePeerConnection();
+            
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            const offerData = btoa(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+            offerCode.textContent = offerData;
+            
+            hostInstructions.classList.remove('hidden');
+            
+            // Generate QR Code
+            const qrData = window.location.origin + window.location.pathname + '?offer=' + offerData;
+            document.getElementById('qrcode').innerHTML = '';
+            new QRCode(document.getElementById('qrcode'), {
+                text: qrData,
+                width: 180,
+                height: 180
+            });
+            
+            updateStatus('waiting', 'Waiting for peer to join...');
         });
-    }
-    
-    function initializeTokenChart() {
-        const ctx = document.getElementById('tokenChart').getContext('2d');
-        if (tokenChart) tokenChart.destroy();
-        tokenChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Token Count',
-                    data: [],
-                    backgroundColor: 'rgba(15, 157, 88, 0.6)',
-                    borderColor: 'rgb(15, 157, 88)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: { legend: { display: false } },
-                indexAxis: 'y',
-                scales: {
-                    x: { beginAtZero: true, title: { display: true, text: 'Frequency' } },
-                    y: { ticks: { autoSkip: false } }
-                }
-            }
+
+        // Copy Offer Code
+        copyOfferBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(offerCode.textContent);
+            copyOfferBtn.textContent = '✓ Copied!';
+            setTimeout(() => copyOfferBtn.textContent = 'Copy Offer Code', 2000);
         });
-    }
-    
-    // State Management
-    const state = new Proxy({
-        mode: CONFIG.modelMode,
-        vocabSize: 0,
-        currentLoss: 'N/A',
-        epochsRun: 0,
-        latency: 'N/A',
-        isTraining: false,
-    }, {
-        set(obj, prop, value) {
-            obj[prop] = value;
-            updateUI(prop, value);
-            return true;
-        }
-    });
-    
-    function updateUI(prop, value) {
-        switch (prop) {
-            case 'mode':
-                document.getElementById('model-mode-name').textContent = value === 'MARKOV' ? 'Markov Chain (Fallback)' : 'MiniTransformer (TF.js)';
-                document.getElementById('current-mode-label').style.borderLeftColor = value === 'MARKOV' ? '#ccc' : 'var(--primary-blue)';
-                document.getElementById('llm-output').innerHTML = `<em>Switched to ${value} mode. Re-run generation.</em>`;
-                break;
-            case 'vocabSize':
-                document.getElementById('metric-vocab-size').textContent = value.toLocaleString();
-                break;
-            case 'currentLoss':
-                document.getElementById('metric-loss').textContent = typeof value === 'number' ? value.toFixed(4) : value;
-                break;
-            case 'epochsRun':
-                document.getElementById('metric-epochs').textContent = value.toLocaleString();
-                break;
-            case 'latency':
-                document.getElementById('metric-latency').textContent = value;
-                break;
-            case 'isTraining':
-                const trainButton = document.getElementById('train-button');
-                trainButton.disabled = value;
-                trainButton.innerHTML = value ? '<i class="fas fa-spinner fa-spin"></i> Training...' : '<i class="fas fa-bolt"></i> Train Model';
-                break;
-        }
-    }
-    
-    function toggleModelMode(isChecked) {
-        state.mode = isChecked ? 'TRANSFORMER' : 'MARKOV';
-        const displayStyle = state.mode === 'TRANSFORMER' ? 'grid' : 'none';
-        
-        document.getElementById('model-controls-panel').style.display = displayStyle;
-        document.getElementById('model-dashboard').style.display = displayStyle;
-        
-        if (state.mode === 'TRANSFORMER' && !lossChart) {
-             initializeLossChart();
-        }
-        
-        const trainButton = document.getElementById('train-button');
-        if (state.mode === 'TRANSFORMER') {
-            trainButton.innerHTML = '<i class="fas fa-bolt"></i> Train Model (TF.js)';
-            trainButton.style.backgroundColor = '#3C769D';
-        } else {
-            trainButton.innerHTML = '<i class="fas fa-bolt"></i> Train Model (Markov)';
-            trainButton.style.backgroundColor = '#0F9D58';
-        }
-    }
-    
-    // UI Controls
-    document.getElementById('max-tokens-input').addEventListener('input', (e) => CONFIG.maxTokens = parseInt(e.target.value));
-    document.getElementById('temperature-input').addEventListener('input', (e) => CONFIG.temperature = parseFloat(e.target.value));
-    document.getElementById('embedding-size-input').addEventListener('input', (e) => CONFIG.embeddingDim = parseInt(e.target.value));
-    document.getElementById('epochs-input').addEventListener('input', (e) => CONFIG.train.epochs = parseInt(e.target.value));
-    document.getElementById('batch-size-input').addEventListener('input', (e) => CONFIG.train.batchSize = parseInt(e.target.value));
-    document.getElementById('learning-rate-input').addEventListener('input', (e) => CONFIG.train.learningRate = parseFloat(e.target.value));
-    
-    // Tokenizer
-    class Tokenizer {
-        constructor() {
-            this.vocab = {}; 
-            this.idToToken = {};
-            this.tokenCounts = {}; 
-            this.nextId = 1;
-        }
-        
-        cleanText(text) {
-            return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ').replace(/\s{2,}/g, ' ');
-        }
-        
-        train(corpus) {
-            const cleanedCorpus = this.cleanText(corpus);
-            const words = cleanedCorpus.split(/\s+/).filter(w => w.length > 0);
-            
-            this.vocab = {};
-            this.idToToken = {};
-            this.tokenCounts = {};
-            this.nextId = 1;
-            
-            words.forEach(word => {
-                if (!this.vocab[word]) {
-                    this.vocab[word] = this.nextId;
-                    this.idToToken[this.nextId] = word;
-                    this.nextId++;
-                }
-                this.tokenCounts[word] = (this.tokenCounts[word] || 0) + 1;
-            });
-            
-            this.idToToken[UNK_TOKEN_ID] = '[PAD]';
-            state.vocabSize = Object.keys(this.vocab).length;
-            showAlert(`Tokenizer trained. Vocab size: ${state.vocabSize} (plus 1 reserved ID for padding)`, 'Tokenization Complete');
-        }
-        
-        encode(text) {
-            if (state.vocabSize === 0) return [];
-            const cleanedText = this.cleanText(text);
-            const words = cleanedText.split(/\s+/).filter(w => w.length > 0);
-            return words.map(word => this.vocab[word] || UNK_TOKEN_ID);
-        }
-        
-        decode(ids) {
-            return ids.map(id => this.idToToken[id] || '[UNK]').join(' ');
-        }
-        
-        getTopTokenFrequencies(n = 10) {
-            const sortedTokens = Object.entries(this.tokenCounts)
-                .sort(([, countA], [, countB]) => countB - countA)
-                .slice(0, n);
-            
-            return {
-                labels: sortedTokens.map(([token]) => token),
-                data: sortedTokens.map(([, count]) => count)
-            };
-        }
 
-        exportVocabulary() {
-            const vocabContent = JSON.stringify(this.idToToken, null, 2);
-            const blob = new Blob([vocabContent], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'llm_vocab.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showAlert('The current vocabulary has been exported as **llm_vocab.json**.', 'Export Successful');
-        }
-    }
-    
-    // Data Handler
-    class DataHandler {
-        constructor(tokenizer) {
-            this.tokenizer = tokenizer;
-            this.corpusText = "";
-            this.tokenIDs = [];
-            this.transitionMatrix = null;
-            this.uploadedFiles = [];
-            this.totalSizeMB = 0;
-            this.setupListeners();
-            initializeTokenChart();
-        }
-        
-        setupListeners() {
-            document.getElementById('file-input').addEventListener('change', (e) => {
-                this.handleFiles(e.target.files);
-            });
+        // Submit Answer (Host receives answer from joiner)
+        submitAnswerBtn.addEventListener('click', async () => {
+            const answerData = answerInput.value.trim();
+            if (!answerData) return;
             
-            document.getElementById('text-input').addEventListener('input', (e) => {
-                this.corpusText = e.target.value;
-            });
-            
-            const dropZone = document.getElementById('drop-zone');
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, this.preventDefaults, false);
-            });
-            dropZone.addEventListener('dragenter', () => dropZone.classList.add('drag-over'), false);
-            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'), false);
-            dropZone.addEventListener('drop', (e) => {
-                dropZone.classList.remove('drag-over');
-                this.handleFiles(e.dataTransfer.files);
-            }, false);
-        }
-        
-        preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
-        handleFiles(files) {
-            const progressBarContainer = document.getElementById('progress-container');
-            const progressBar = document.getElementById('progress-bar');
-            
-            if (files.length === 0) return;
-            
-            progressBarContainer.style.display = 'flex';
-            progressBar.style.width = '0%';
-            progressBar.textContent = '0%';
-            this.corpusText = "";
-            this.uploadedFiles = [];
-            this.totalSizeMB = 0;
-            document.getElementById('file-preview').innerHTML = '';
-
-            let filePromises = [];
-            
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const fileSizeMB = file.size / (1024 * 1024);
-                this.totalSizeMB += fileSizeMB;
-
-                this.addFileToPreview(file);
-
-                filePromises.push(new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        this.corpusText += e.target.result + " ";
-                        const progress = ((i + 1) / files.length) * 100;
-                        progressBar.style.width = progress.toFixed(0) + '%';
-                        progressBar.textContent = `${progress.toFixed(0)}% - Reading ${file.name}`;
-                        resolve();
-                    };
-                    currentStreamController = () => {
-                        reader.abort();
-                        resolve();
-                    };
-                    reader.readAsText(file);
+            try {
+                const data = JSON.parse(atob(answerData));
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: data.sdp
                 }));
+                submitAnswerBtn.textContent = '✓ Connected!';
+                submitAnswerBtn.disabled = true;
+            } catch (e) {
+                alert('Invalid answer code. Please check and try again.');
+                console.error(e);
             }
+        });
 
-            Promise.all(filePromises).then(() => {
-                progressBarContainer.style.display = 'none';
-                document.getElementById('text-input').value = this.corpusText.trim();
-                showAlert(`Successfully loaded ${files.length} files (${this.totalSizeMB.toFixed(2)} MB). Ready for tokenization.`, 'File Load Complete');
-                this.updateSummary();
-                currentStreamController = null;
-            }).catch(error => {
-                progressBarContainer.style.display = 'none';
-                showAlert(`Error reading files: ${error.message}`, 'File Read Error');
-                console.error('File read error:', error);
-                currentStreamController = null;
-            });
-        }
-        
-        addFileToPreview(fileInfo) {
-            const preview = document.getElementById('file-preview');
-            const fileItem = document.createElement('div');
-            const sizeString = fileInfo.size ? `${(fileInfo.size / (1024 * 1024)).toFixed(2)} MB` : 'S3';
-
-            fileItem.className = 'file-item';
-            fileItem.innerHTML = `<i class="fas fa-file-alt"></i> <span>${fileInfo.name}</span> <span style="font-size: 0.8em;">(${sizeString})</span>`;
+        // Join Room (Joiner)
+        joinRoomBtn.addEventListener('click', async () => {
+            const offerData = joinInput.value.trim();
+            if (!offerData) return;
             
-            this.uploadedFiles.push(fileInfo);
-            
-            const removeIcon = document.createElement('i');
-            removeIcon.className = 'fas fa-times remove-file';
-            removeIcon.onclick = () => {
-                 fileItem.remove();
-                 showAlert(`Removed file **${fileInfo.name}**. You must re-run tokenization.`, 'File Removed');
-            };
-            fileItem.appendChild(removeIcon);
-            
-            preview.appendChild(fileItem);
-            this.updateSummary();
-        }
-
-        updateSummary() {
-            document.getElementById('file-analytics-summary').textContent = 
-                `${this.uploadedFiles.length} Files Uploaded (${this.totalSizeMB.toFixed(2)} MB)`;
-        }
-        
-        tokenizeAndBuildMatrix() {
-            const corpus = document.getElementById('text-input').value.trim() || this.corpusText.trim();
-            if (!corpus) {
-                showAlert('Please provide a text corpus (paste text, upload files, or stream from S3) before tokenization.', 'Input Required');
-                return;
+            try {
+                const data = JSON.parse(atob(offerData));
+                
+                isInitiator = false;
+                joinRoomBtn.disabled = true;
+                await initializePeerConnection();
+                
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                    type: 'offer',
+                    sdp: data.sdp
+                }));
+                
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                const answerData = btoa(JSON.stringify({ type: 'answer', sdp: answer.sdp }));
+                answerCode.textContent = answerData;
+                
+                joinerInstructions.classList.remove('hidden');
+                updateStatus('waiting', 'Waiting for host to connect...');
+            } catch (e) {
+                alert('Invalid offer code. Please check and try again.');
+                console.error(e);
+                joinRoomBtn.disabled = false;
             }
+        });
 
-            this.tokenizer.train(corpus);
-            this.tokenIDs = this.tokenizer.encode(corpus);
+        // Copy Answer Code
+        copyAnswerBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(answerCode.textContent);
+            copyAnswerBtn.textContent = '✓ Copied!';
+            setTimeout(() => copyAnswerBtn.textContent = 'Copy Answer Code', 2000);
+        });
+
+        // Initialize Peer Connection
+        async function initializePeerConnection() {
+            peerConnection = new RTCPeerConnection(config);
             
-            if (state.mode === 'MARKOV') {
-                 this.buildMarkovTransitionMatrix(this.tokenIDs);
+            if (isInitiator) {
+                dataChannel = peerConnection.createDataChannel('chat');
+                setupDataChannel();
             } else {
-                 this.transitionMatrix = null;
-            }
-            
-            this.updateTokenChart();
-            this.updateHeatmap();
-            
-            document.getElementById('data-analytics-section').style.display = 'block';
-            
-            showAlert(`Tokenization and Preprocessing complete. Total tokens: **${this.tokenIDs.length.toLocaleString()}**`, 'Preprocessing Complete');
-        }
-        
-        buildMarkovTransitionMatrix(tokenIDs) {
-            const size = state.vocabSize + 1;
-            let matrix = Array(size).fill(0).map(() => Array(size).fill(0));
-            let rowSums = Array(size).fill(0);
-
-            for (let i = 0; i < tokenIDs.length - 1; i++) {
-                const currentId = tokenIDs[i];
-                const nextId = tokenIDs[i+1];
-                
-                const fromId = currentId < size ? currentId : UNK_TOKEN_ID;
-                const toId = nextId < size ? nextId : UNK_TOKEN_ID;
-                
-                matrix[fromId][toId]++;
-                rowSums[fromId]++;
-            }
-
-            for (let i = 0; i < size; i++) {
-                if (rowSums[i] > 0) {
-                    for (let j = 0; j < size; j++) {
-                        matrix[i][j] /= rowSums[i];
-                    }
-                }
-            }
-            
-            this.transitionMatrix = matrix;
-        }
-
-        updateTokenChart() {
-            const { labels, data } = this.tokenizer.getTopTokenFrequencies(10);
-            tokenChart.data.labels = labels;
-            tokenChart.data.datasets[0].data = data;
-            tokenChart.update();
-        }
-
-        updateHeatmap() {
-            const heatmapContent = document.getElementById('transition-heatmap-content');
-            if (state.mode === 'TRANSFORMER') {
-                heatmapContent.innerHTML = `<em>Transition Heatmap is used for Markov analysis. Transformer mode relies on vector-based Attention Weights.</em>`;
-                return;
-            }
-            if (!this.transitionMatrix) {
-                heatmapContent.innerHTML = `<em>Run tokenization to view Markov transition probabilities.</em>`;
-                return;
-            }
-
-            const size = state.vocabSize + 1;
-            let html = '<table><thead><tr><th>Next →</th>';
-            for (let j = 1; j < Math.min(size, 10); j++) {
-                 html += `<th>${this.tokenizer.idToToken[j]}</th>`;
-            }
-            html += '</tr></thead><tbody>';
-
-            for (let i = 1; i < Math.min(size, 10); i++) {
-                const token = this.tokenizer.idToToken[i];
-                html += `<tr><th>${token}</th>`;
-                for (let j = 1; j < Math.min(size, 10); j++) {
-                    const prob = this.transitionMatrix[i][j] || 0;
-                    const color = `rgba(26, 115, 232, ${prob})`;
-                    html += `<td class="heatmap-cell" style="background-color: ${color};" title="P(${this.tokenizer.idToToken[j]} | ${token}) = ${prob.toFixed(3)}">${(prob * 100).toFixed(1)}%</td>`;
-                }
-                html += '</tr>';
-            }
-            html += '</tbody></table>';
-            
-            heatmapContent.innerHTML = html;
-        }
-    }
-    
-    // AWS S3 Connector
-    let awsS3 = null;
-    let awsConfig = {
-        region: '',
-        accessKeyId: '',
-        secretAccessKey: '',
-        bucket: '',
-        prefix: ''
-    };
-
-    function showAwsConfigModal() {
-        document.getElementById('aws-config-modal').style.display = 'flex';
-    }
-
-    function closeAwsConfigModal() {
-        document.getElementById('aws-config-modal').style.display = 'none';
-    }
-
-    async function connectAwsS3() {
-        awsConfig.region = document.getElementById('aws-region').value.trim();
-        awsConfig.accessKeyId = document.getElementById('aws-access-key').value.trim();
-        awsConfig.secretAccessKey = document.getElementById('aws-secret-key').value.trim();
-        awsConfig.bucket = document.getElementById('aws-bucket').value.trim();
-        awsConfig.prefix = document.getElementById('aws-prefix').value.trim();
-
-        if (!awsConfig.region || !awsConfig.accessKeyId || !awsConfig.secretAccessKey || !awsConfig.bucket) {
-            showAlert('Please fill in all required AWS configuration fields.', 'Configuration Error');
-            return;
-        }
-
-        closeAwsConfigModal();
-        
-        try {
-            AWS.config.update({
-                region: awsConfig.region,
-                accessKeyId: awsConfig.accessKeyId,
-                secretAccessKey: awsConfig.secretAccessKey
-            });
-
-            awsS3 = new AWS.S3();
-            
-            showAlert(`Connecting to S3 bucket: <strong>${awsConfig.bucket}</strong>...`, 'Connecting to AWS');
-            
-            const params = {
-                Bucket: awsConfig.bucket,
-                Prefix: awsConfig.prefix,
-                MaxKeys: 100
-            };
-
-            const progressContainer = document.getElementById('progress-container');
-            const progressBar = document.getElementById('progress-bar');
-            progressContainer.style.display = 'flex';
-            progressBar.style.width = '0%';
-            progressBar.textContent = 'Listing files...';
-
-            awsS3.listObjectsV2(params, async (err, data) => {
-                if (err) {
-                    progressContainer.style.display = 'none';
-                    showAlert(`AWS S3 Error: ${err.message}<br><br>Please check your credentials and bucket name.`, 'Connection Failed');
-                    console.error('S3 Error:', err);
-                    return;
-                }
-
-                const files = data.Contents.filter(obj => 
-                    obj.Size > 0 && 
-                    (obj.Key.endsWith('.txt') || obj.Key.endsWith('.csv') || obj.Key.endsWith('.md'))
-                );
-
-                if (files.length === 0) {
-                    progressContainer.style.display = 'none';
-                    showAlert('No text files found in the specified S3 bucket/prefix.', 'No Files Found');
-                    return;
-                }
-
-                showAlert(`Found ${files.length} file(s). Starting download...`, 'Files Discovered');
-                await downloadS3Files(files);
-            });
-
-        } catch (error) {
-            showAlert(`Error initializing AWS S3: ${error.message}`, 'Configuration Error');
-            console.error('AWS Config Error:', error);
-        }
-    }
-
-    async function downloadS3Files(files) {
-        const progressContainer = document.getElementById('progress-container');
-        const progressBar = document.getElementById('progress-bar');
-        
-        dataHandler.uploadedFiles = [];
-        dataHandler.totalSizeMB = 0;
-        dataHandler.corpusText = "";
-        document.getElementById('file-preview').innerHTML = '';
-
-        let filesProcessed = 0;
-        const totalFiles = files.length;
-
-        for (const file of files) {
-            try {
-                const params = {
-                    Bucket: awsConfig.bucket,
-                    Key: file.Key
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannel();
                 };
-
-                progressBar.textContent = `Downloading ${file.Key}...`;
-
-                const data = await awsS3.getObject(params).promise();
-                const content = data.Body.toString('utf-8');
-                
-                dataHandler.corpusText += content + " ";
-                filesProcessed++;
-
-                const progress = (filesProcessed / totalFiles) * 100;
-                progressBar.style.width = progress.toFixed(0) + '%';
-                progressBar.textContent = `${progress.toFixed(0)}% (${filesProcessed}/${totalFiles})`;
-
-                const fileSizeMB = (file.Size / (1024 * 1024)).toFixed(2);
-                dataHandler.addFileToPreview({ name: file.Key, size: fileSizeMB });
-
-            } catch (error) {
-                console.error(`Error downloading ${file.Key}:`, error);
-                showAlert(`Failed to download ${file.Key}: ${error.message}`, 'Download Error');
-            }
-        }
-
-        progressContainer.style.display = 'none';
-        document.getElementById('text-input').value = dataHandler.corpusText.trim();
-        
-        showAlert(`Successfully downloaded ${filesProcessed} file(s) from S3. Total size: ${dataHandler.totalSizeMB.toFixed(2)} MB`, 'S3 Download Complete');
-        dataHandler.tokenizeAndBuildMatrix();
-    }
-
-    function cancelStreaming() {
-        if (currentStreamController) {
-            currentStreamController();
-        }
-        document.getElementById('progress-container').style.display = 'none';
-    }
-    
-    // Sample Data Loader
-    function loadSampleData() {
-        const sampleText = `
-Machine learning is a subset of artificial intelligence that enables computers to learn from data without being explicitly programmed. 
-Through algorithms and statistical models, machine learning systems can identify patterns and make decisions with minimal human intervention.
-
-The field of machine learning has revolutionized many industries. In healthcare, machine learning algorithms can predict patient outcomes 
-and assist in diagnosis. In finance, they detect fraudulent transactions and optimize trading strategies. Self-driving cars use machine 
-learning to navigate roads and avoid obstacles.
-
-There are three main types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. Supervised learning 
-uses labeled data to train models. The algorithm learns from examples where the correct answer is known. Unsupervised learning finds hidden 
-patterns in data without labels. Reinforcement learning trains agents to make sequences of decisions by rewarding desired behaviors.
-
-Deep learning is a powerful subset of machine learning based on artificial neural networks. These networks contain multiple layers that 
-process information hierarchically. Each layer extracts increasingly complex features from the input data. Deep learning has achieved 
-remarkable success in image recognition, natural language processing, and game playing.
-
-Natural language processing allows computers to understand and generate human language. Modern language models can write essays, answer 
-questions, and even engage in conversations. These models are trained on vast amounts of text data from books, websites, and other sources.
-
-The future of machine learning looks promising. Researchers are working on making algorithms more efficient, interpretable, and fair. 
-As computing power increases and data becomes more abundant, machine learning will continue to transform how we live and work.
-
-Artificial intelligence and machine learning are not without challenges. Concerns about bias in algorithms, privacy of training data, 
-and the environmental impact of large models are important considerations. Responsible development of these technologies requires careful 
-attention to ethics and societal impact.
-
-Education in machine learning is becoming increasingly accessible. Online courses, tutorials, and open-source libraries make it easier 
-for people to learn and experiment with these powerful tools. The democratization of machine learning knowledge is accelerating innovation 
-across all fields.
-        `;
-        
-        document.getElementById('text-input').value = sampleText.trim();
-        dataHandler.corpusText = sampleText.trim();
-        showAlert('Sample text loaded! This is a small corpus about machine learning. Click "Tokenize & Preprocess" to continue.', 'Sample Data Loaded');
-    }
-    
-    // Markov Chain
-    class MarkovChain {
-        constructor(tokenizer, dataHandler) {
-            this.tokenizer = tokenizer;
-            this.dataHandler = dataHandler;
-        }
-
-        generate(prompt) {
-            const matrix = this.dataHandler.transitionMatrix;
-            if (!matrix) return 'Error: Markov transition matrix not built. Run Tokenize & Preprocess first.';
-            
-            const promptWords = this.tokenizer.cleanText(prompt).split(/\s+/).filter(w => w.length > 0);
-            if (promptWords.length === 0) {
-                 return 'Error: Please enter a prompt for the Markov model.';
-            }
-
-            const startToken = promptWords[promptWords.length - 1];
-            let currentId = this.tokenizer.vocab[startToken] || UNK_TOKEN_ID;
-            let outputIds = this.tokenizer.encode(prompt);
-            
-            for (let i = 0; i < CONFIG.maxTokens; i++) {
-                const probabilities = matrix[currentId];
-                if (!probabilities) break;
-                
-                let sum = 0;
-                let r = Math.random();
-                let nextId = UNK_TOKEN_ID;
-                
-                for (let j = 0; j < probabilities.length; j++) {
-                    sum += probabilities[j];
-                    if (r <= sum) {
-                        nextId = j;
-                        break;
-                    }
-                }
-                
-                if (nextId === UNK_TOKEN_ID) break;
-                
-                outputIds.push(nextId);
-                currentId = nextId;
             }
             
-            return this.tokenizer.decode(outputIds);
-        }
-    }
-    
-    // Mini Transformer
-    class MiniTransformer {
-        constructor(tokenizer, dataHandler) {
-            this.tokenizer = tokenizer;
-            this.dataHandler = dataHandler;
-            this.model = null;
-            this.lossHistory = [];
-        }
-
-        buildModel() {
-            const vocabSize = state.vocabSize + 1;
-            const d_model = CONFIG.embeddingDim;
-            const ffnDim = CONFIG.ffnDim;
-            const seqLen = SEQUENCE_LENGTH;
-
-            console.log(`Building model with vocab_size=${vocabSize}, d_model=${d_model}, seq_len=${seqLen}`);
-
-            // Improved model architecture with flattening for better sequence processing
-            this.model = tf.sequential({
-                layers: [
-                    // Flatten the one-hot encoded input
-                    tf.layers.flatten({ 
-                        inputShape: [seqLen, vocabSize],
-                        name: 'flatten_input'
-                    }),
-                    // First dense layer (embedding-like)
-                    tf.layers.dense({ 
-                        units: d_model * 2, 
-                        activation: 'relu',
-                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
-                        name: 'embedding_dense'
-                    }),
-                    tf.layers.dropout({ rate: 0.2 }),
-                    // Second dense layer (attention-like)
-                    tf.layers.dense({ 
-                        units: ffnDim, 
-                        activation: 'relu',
-                        kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
-                        name: 'attention_ffn'
-                    }),
-                    tf.layers.dropout({ rate: 0.2 }),
-                    // Third hidden layer
-                    tf.layers.dense({ 
-                        units: d_model, 
-                        activation: 'relu',
-                        name: 'hidden_layer'
-                    }),
-                    // Output layer
-                    tf.layers.dense({ 
-                        units: vocabSize, 
-                        activation: 'softmax',
-                        name: 'output_layer'
-                    })
-                ]
-            });
-            
-            this.model.compile({
-                optimizer: tf.train.adam(CONFIG.train.learningRate),
-                loss: 'categoricalCrossentropy',
-                metrics: ['accuracy']
-            });
-            
-            this.model.summary();
-            
-            showAlert(`
-                <strong>Model Architecture Built</strong><br><br>
-                • Vocab Size: ${vocabSize.toLocaleString()}<br>
-                • Embedding Dim: ${d_model}<br>
-                • Sequence Length: ${seqLen}<br>
-                • FFN Dim: ${ffnDim}<br>
-                • Hidden Layers: 4<br>
-                • Learning Rate: ${CONFIG.train.learningRate}<br>
-                • Regularization: L2 (0.01)
-            `, 'Model Ready');
-        }
-
-        async trainOnText() {
-            if (state.isTraining) return;
-            state.isTraining = true;
-            this.lossHistory = [];
-            state.epochsRun = 0;
-            initializeLossChart();
-
-            const tokenIDs = this.dataHandler.tokenIDs;
-            if (tokenIDs.length < SEQUENCE_LENGTH * 2) {
-                showAlert('Corpus is too short. Need more text to train a Transformer model.', 'Training Error');
-                state.isTraining = false;
-                return;
-            }
-
-            if (!this.model) this.buildModel();
-            
-            const trainingStatus = document.getElementById('training-status');
-            trainingStatus.classList.add('active');
-            
-            const generateTrainingData = () => {
-                let xs = [];
-                let ys = [];
-                const vocabSize = state.vocabSize + 1;
-                
-                for (let i = 0; i < tokenIDs.length - SEQUENCE_LENGTH; i++) {
-                    const inputSeq = tokenIDs.slice(i, i + SEQUENCE_LENGTH);
-                    const targetToken = tokenIDs[i + SEQUENCE_LENGTH];
-                    
-                    const inputTensor = tf.oneHot(inputSeq, vocabSize).arraySync();
-                    const targetTensor = tf.oneHot(targetToken, vocabSize).arraySync();
-                    
-                    xs.push(inputTensor);
-                    ys.push(targetTensor);
-                }
-                
-                return { 
-                    xs: tf.tensor3d(xs, [xs.length, SEQUENCE_LENGTH, vocabSize]), 
-                    ys: tf.tensor2d(ys, [ys.length, vocabSize]) 
-                };
+            peerConnection.onicecandidate = (event) => {
+                // ICE candidates are embedded in the SDP
             };
             
-            const { xs, ys } = generateTrainingData();
-            const numSamples = xs.shape[0];
-
-            showAlert(`Starting Transformer Training with ${numSamples.toLocaleString()} training samples over ${CONFIG.train.epochs} epochs...`, 'Training Started');
-            
-            for (let epoch = 0; epoch < CONFIG.train.epochs; epoch++) {
-                if (!state.isTraining) break;
-                
-                const startTime = performance.now();
-                
-                await this.model.fit(xs, ys, {
-                    epochs: 1,
-                    batchSize: CONFIG.train.batchSize,
-                    shuffle: true,
-                    verbose: 0,
-                    callbacks: {
-                        onBatchEnd: async (batch, logs) => {
-                            const batchProgress = `Epoch ${epoch + 1}/${CONFIG.train.epochs} - Batch ${batch + 1} - Loss: ${logs.loss.toFixed(4)}`;
-                            document.getElementById('training-progress-text').textContent = batchProgress;
-                        },
-                        onEpochEnd: (e, logs) => {
-                            const loss = logs.loss;
-                            const accuracy = logs.acc || 0;
-                            
-                            this.lossHistory.push(loss);
-                            state.currentLoss = loss;
-                            state.epochsRun = epoch + 1;
-                            
-                            if (lossChart) {
-                                lossChart.data.labels.push(epoch + 1);
-                                lossChart.data.datasets[0].data.push(loss);
-                                lossChart.update('none');
-                            }
-                            
-                            const epochTime = ((performance.now() - startTime) / 1000).toFixed(2);
-                            
-                            const statusText = `Epoch ${epoch + 1}/${CONFIG.train.epochs} - Loss: ${loss.toFixed(4)} - Accuracy: ${(accuracy * 100).toFixed(2)}% - Time: ${epochTime}s`;
-                            document.getElementById('training-progress-text').textContent = statusText;
-                            
-                            console.log(`Epoch ${epoch + 1} complete: Loss=${loss.toFixed(4)}, Acc=${(accuracy * 100).toFixed(2)}%, Time=${epochTime}s`);
-                        }
-                    }
-                });
-                
-                await tf.nextFrame();
-            }
-            
-            xs.dispose();
-            ys.dispose();
-            
-            state.isTraining = false;
-            trainingStatus.classList.remove('active');
-            
-            const memoryInfo = tf.memory();
-            const memoryMB = (memoryInfo.numBytes / (1024 * 1024)).toFixed(2);
-            document.getElementById('metric-memory').textContent = `${memoryMB} MB`;
-            
-            showAlert(`Transformer Training complete!<br><br><strong>Final Loss:</strong> ${state.currentLoss.toFixed(4)}<br><strong>Total Epochs:</strong> ${state.epochsRun}<br><strong>Memory Used:</strong> ${memoryMB} MB`, 'Training Finished');
-        }
-
-        async generate(prompt) {
-            if (!this.model) {
-                 return 'Error: MiniTransformer model not trained or loaded. Please train the model first.';
-            }
-            
-            const startTime = performance.now();
-            
-            let outputIDs = this.tokenizer.encode(prompt);
-            if (outputIDs.length === 0) {
-                return 'Error: Could not encode prompt. Please check your input.';
-            }
-            
-            let currentIDs = outputIDs.slice(-SEQUENCE_LENGTH);
-            let generatedCount = 0;
-            const maxGenerations = Math.min(CONFIG.maxTokens, 100); // Limit output
-
-            for (let i = 0; i < maxGenerations; i++) {
-                if (currentIDs.length < SEQUENCE_LENGTH) {
-                    currentIDs = Array(SEQUENCE_LENGTH - currentIDs.length).fill(UNK_TOKEN_ID).concat(currentIDs);
+            peerConnection.onconnectionstatechange = () => {
+                if (peerConnection.connectionState === 'connected') {
+                    updateStatus('connected', 'Connected & Encrypted');
+                    setupArea.classList.add('hidden');
+                    chatArea.classList.add('active');
+                } else if (peerConnection.connectionState === 'disconnected' || 
+                           peerConnection.connectionState === 'failed') {
+                    updateStatus('disconnected', 'Disconnected');
                 }
-                
-                const inputTensorArray = tf.oneHot(currentIDs.slice(-SEQUENCE_LENGTH), state.vocabSize + 1).arraySync();
-                const inputTensor = tf.tensor3d([inputTensorArray], [1, SEQUENCE_LENGTH, state.vocabSize + 1]);
-                
-                const prediction = this.model.predict(inputTensor);
-                const logits = await prediction.data();
-                
-                prediction.dispose();
-                inputTensor.dispose();
-
-                const nextId = this.sampleWithTemperature(Array.from(logits), CONFIG.temperature);
-                
-                // Stop if we get UNK or PAD
-                if (nextId === UNK_TOKEN_ID || nextId === 0) {
-                    console.log('Stopping generation: UNK/PAD token sampled');
-                    break;
-                }
-
-                outputIDs.push(nextId);
-                currentIDs.push(nextId);
-                generatedCount++;
-                
-                // Stop after generating enough new tokens
-                if (generatedCount >= 50) break;
-                
-                if (i % 10 === 0) await tf.nextFrame();
-            }
-            
-            const endTime = performance.now();
-            const latency = (endTime - startTime).toFixed(2);
-            state.latency = `${latency} ms`;
-            
-            console.log(`Generation completed in ${latency}ms for ${outputIDs.length} tokens`);
-            
-            return this.tokenizer.decode(outputIDs);
-        }
-        
-        sampleWithTemperature(probabilities, temperature) {
-            const size = probabilities.length;
-            
-            let sum = probabilities.reduce((a, b) => a + b, 0);
-            if (sum === 0) return 1; // Return first real token instead of UNK
-            
-            let scaledProbs = probabilities.map(p => p / sum);
-            
-            // Apply temperature scaling
-            if (temperature !== 1.0) {
-                 scaledProbs = scaledProbs.map(p => Math.pow(Math.max(p, 1e-10), 1 / temperature));
-                 const scaledSum = scaledProbs.reduce((a, b) => a + b, 0);
-                 scaledProbs = scaledProbs.map(p => p / scaledSum);
-            }
-            
-            // Reduce probability of UNK token (index 0) to avoid generating it
-            scaledProbs[0] = scaledProbs[0] * 0.01;
-            
-            // Renormalize after reducing UNK probability
-            const newSum = scaledProbs.reduce((a, b) => a + b, 0);
-            scaledProbs = scaledProbs.map(p => p / newSum);
-            
-            // Categorical sampling
-            let r = Math.random();
-            let accumulator = 0;
-            for (let i = 0; i < size; i++) {
-                 accumulator += scaledProbs[i];
-                 if (r < accumulator && i !== 0) { // Skip UNK token
-                     return i;
-                 }
-            }
-            // Fallback: return a random non-UNK token
-            return Math.floor(Math.random() * (size - 1)) + 1;
+            };
         }
 
-        async saveModel() {
-            if (!this.model) {
-                showAlert('No model to save. Please train a model first.', 'Save Error');
-                return;
-            }
+        // Setup Data Channel
+        function setupDataChannel() {
+            dataChannel.onopen = () => {
+                updateStatus('connected', 'Connected & Encrypted');
+                setupArea.classList.add('hidden');
+                chatArea.classList.add('active');
+            };
             
-            try {
-                await this.model.save('downloads://llm-model');
-                showAlert('Model weights have been downloaded to your computer as JSON files.', 'Model Saved Successfully');
-            } catch (error) {
-                showAlert(`Error saving model: ${error.message}`, 'Save Error');
-                console.error('Model save error:', error);
-            }
+            dataChannel.onclose = () => {
+                updateStatus('disconnected', 'Disconnected');
+            };
+            
+            dataChannel.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                addMessage(data.text, false, data.time);
+            };
         }
 
-        async loadModel() {
-            try {
-                const fileInput = document.createElement('input');
-                fileInput.type = 'file';
-                fileInput.multiple = true;
-                fileInput.accept = '.json';
-                
-                fileInput.onchange = async (e) => {
-                    const files = Array.from(e.target.files);
-                    if (files.length < 2) {
-                        showAlert('Please select both model.json and weights.bin files', 'Load Error');
-                        return;
-                    }
-                    
-                    try {
-                        this.model = await tf.loadLayersModel(tf.io.browserFiles(files));
-                        
-                        state.epochsRun = 10;
-                        state.currentLoss = 0.4523;
-                        
-                        showAlert('Model weights loaded successfully! You can now generate text.', 'Model Loaded');
-                    } catch (error) {
-                        showAlert(`Error loading model: ${error.message}`, 'Load Error');
-                        console.error('Model load error:', error);
-                    }
-                };
-                
-                fileInput.click();
-            } catch (error) {
-                showAlert(`Error initiating model load: ${error.message}`, 'Load Error');
-            }
-        }
-    }
-    
-    // Initialize global objects
-    const tokenizer = new Tokenizer();
-    const dataHandler = new DataHandler(tokenizer);
-    const markovModel = new MarkovChain(tokenizer, dataHandler);
-    const miniTransformer = new MiniTransformer(tokenizer, dataHandler);
-    
-    // Main generation function
-    async function generateTextFromModel() {
-        const prompt = document.getElementById('prompt-input').value.trim();
-        const outputElement = document.getElementById('llm-output');
-        
-        if (!prompt) {
-             outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Please enter a prompt.</em>';
-             showAlert('Please enter a prompt in the input field above.', 'Prompt Required');
-             return;
+        // Send Message
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !dataChannel || dataChannel.readyState !== 'open') return;
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const messageData = { text, time };
+            
+            dataChannel.send(JSON.stringify(messageData));
+            addMessage(text, true, time);
+            messageInput.value = '';
         }
 
-        if (state.mode === 'TRANSFORMER' && !miniTransformer.model) {
-            outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ No trained model found. Please train the Transformer model first.</em>';
-            showAlert('Please train the Transformer model before generating text.', 'Model Not Trained');
-            return;
-        }
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
 
-        if (state.mode === 'MARKOV' && !dataHandler.transitionMatrix) {
-            outputElement.innerHTML = '<em style="color: var(--google-red);">⚠ Markov chain not built. Please run tokenization first.</em>';
-            showAlert('Please tokenize your corpus before using the Markov model.', 'Data Not Processed');
-            return;
-        }
-
-        outputElement.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--primary-blue);"></i><br><br><em>Generating text...</em></div>';
-        
-        try {
-            let generatedText = "";
-            const startTime = performance.now();
+        // Add Message to Chat
+        function addMessage(text, isSent, time) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
             
-            if (state.mode === 'MARKOV') {
-                generatedText = markovModel.generate(prompt);
-            } else {
-                generatedText = await miniTransformer.generate(prompt);
-            }
-            
-            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-            
-            outputElement.innerHTML = `
-                <div style="background-color: #E8F0FE; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid var(--primary-blue);">
-                    <strong style="color: var(--primary-blue);">Prompt:</strong> ${prompt}<br>
-                    <small style="color: var(--secondary-text);">Mode: ${state.mode} | Generation Time: ${totalTime}s | Temperature: ${CONFIG.temperature}</small>
+            messageDiv.innerHTML = `
+                <div class="message-bubble">
+                    ${escapeHtml(text)}
+                    <div class="message-time">${time}</div>
                 </div>
-                <div style="line-height: 1.8; color: var(--text-color);">${generatedText}</div>
             `;
-        } catch (error) {
-            outputElement.innerHTML = `<em style="color: var(--google-red);">⚠ Error generating text: ${error.message}</em>`;
-            console.error('Generation error:', error);
-            showAlert(`Generation failed: ${error.message}`, 'Generation Error');
+            
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
         }
-    }
-    
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', () => {
-         toggleModelMode(document.getElementById('model-mode-toggle').checked); 
-    });
-</script>
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Update Status
+        function updateStatus(state, text) {
+            statusText.textContent = text;
+            statusDot.className = 'status-dot';
+            if (state === 'connected') {
+                statusDot.classList.add('connected');
+            } else if (state === 'waiting') {
+                statusDot.classList.add('waiting');
+            }
+        }
+
+        // Check for offer parameter in URL (QR code scan)
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const offerParam = urlParams.get('offer');
+            if (offerParam) {
+                joinInput.value = offerParam;
+                joinInput.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    </script>
 </body>
 </html>
