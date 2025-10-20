@@ -38,279 +38,244 @@ button { margin-right: 10px; margin-top: 5px; padding: 8px 15px; cursor: pointer
 <script src="https://unpkg.com/openchemlib/openchemlib-full.js"></script>
 
 <script>
-// OCL must be initialized before use.
+// --- THREE.JS GLOBAL SETUP (Runs immediately on script execution) ---
+
+let scene, camera, renderer, controls;
+let moleculeObjects = [];
+
+function initViewer() {
+    // 1. Scene and Camera Setup
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f0f0);
+    camera = new THREE.PerspectiveCamera(75, 900 / 600, 0.1, 2000);
+    camera.position.set(0, 0, 40);
+
+    // 2. Renderer Setup
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(900, 600);
+    document.getElementById('viewer').appendChild(renderer.domElement);
+
+    // 3. Lighting
+    const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
+    light1.position.set(50, 50, 100);
+    scene.add(light1);
+    const light2 = new THREE.AmbientLight(0x606060);
+    scene.add(light2);
+
+    // 4. Controls
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; 
+    controls.dampingFactor = 0.05;
+    
+    // 5. Start Render Loop
+    animate();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update(); // MUST be called if damping is enabled
+    renderer.render(scene, camera);
+}
+
+// --- OPENCHEMLIB-DEPENDENT LOGIC ---
+
+// Global variable to hold the OCL context and molecule data
+let OCL;
+let moleculesData = [];
+
+// Atom color map (simplified CPK-style)
+function getAtomColor(atomLabel) {
+    switch (atomLabel) {
+        case 'O': return 0xff0000; // Red (Oxygen)
+        case 'N': return 0x0000ff; // Blue (Nitrogen)
+        case 'F': case 'Cl': case 'Br': case 'I': return 0x00ff00; // Green (Halogens)
+        case 'H': return 0xffffff; // White (Hydrogen)
+        default: return 0x333333; // Dark Gray (Carbon and others)
+    }
+}
+
+function loadLigAdvisorData() {
+    return {
+        "CCO": { "name": "Ethanol", "targets": ["ADH1A", "ADH1B"] },
+        "CC": { "name": "Ethane", "targets": [] },
+        "O=C=O": { "name": "Carbon dioxide", "targets": ["Carbonic Anhydrase"] },
+    };
+}
+
+function minimizeMolecule(mol) {
+    try {
+        mol.addImplicitHydrogens();
+        mol.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
+        OCL.Molecule3D.generate3DCoordinates(mol);
+        OCL.MMFF94.optimize(mol);
+
+        // Center molecule coordinates
+        let n = mol.getAllAtoms(), cx = 0, cy = 0, cz = 0;
+        for (let i = 0; i < n; i++) {
+            cx += mol.getAtomX(i); cy += mol.getAtomY(i); cz += mol.getAtomZ(i);
+        }
+        cx /= n; cy /= n; cz /= n;
+        for (let i = 0; i < n; i++) {
+            mol.setAtomX(i, mol.getAtomX(i) - cx);
+            mol.setAtomY(i, mol.getAtomY(i) - cy);
+            mol.setAtomZ(i, mol.getAtomZ(i) - cz);
+        }
+        return mol;
+    } catch (e) {
+        // Fallback: only generate 3D coordinates if minimization fails
+        OCL.Molecule3D.generate3DCoordinates(mol);
+        return mol;
+    }
+}
+
+function createBondCylinder(start, end, radius, color) {
+    const length = start.distanceTo(end);
+    const cylinder = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius, length, 8),
+        new THREE.MeshPhongMaterial({ color: color || 0xaaaaaa })
+    );
+
+    cylinder.position.set((start.x + end.x) / 2, (start.y + end.y) / 2, (start.z + end.z) / 2);
+    cylinder.lookAt(end);
+    cylinder.rotateX(Math.PI / 2);
+
+    return cylinder;
+}
+
+function renderMolecule(mol, offsetX = 0) {
+    const group = new THREE.Group();
+    const atomRadius = 0.7;
+    const bondRadius = 0.2;
+
+    // 1. Render Atoms
+    for (let i = 0; i < mol.getAllAtoms(); i++) {
+        const atomLabel = mol.getAtomLabel(i);
+        const color = getAtomColor(atomLabel);
+        
+        const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(atomRadius, 32, 32),
+            new THREE.MeshPhongMaterial({ color: color })
+        );
+        sphere.position.set(mol.getAtomX(i) + offsetX, mol.getAtomY(i), mol.getAtomZ(i));
+        group.add(sphere);
+    }
+
+    // 2. Render Bonds
+    for (let b = 0; b < mol.getAllBonds(); b++) {
+        const atomIdx1 = mol.getBondAtom(b, 0); 
+        const atomIdx2 = mol.getBondAtom(b, 1);
+        
+        const p1 = new THREE.Vector3(mol.getAtomX(atomIdx1) + offsetX, mol.getAtomY(atomIdx1), mol.getAtomZ(atomIdx1));
+        const p2 = new THREE.Vector3(mol.getAtomX(atomIdx2) + offsetX, mol.getAtomY(atomIdx2), mol.getAtomZ(atomIdx2));
+
+        const cylinder = createBondCylinder(p1, p2, bondRadius, 0xaaaaaa);
+        group.add(cylinder);
+    }
+    
+    scene.add(group);
+    moleculeObjects.push(group);
+}
+
+function updateDashboard(molArray) {
+    const data = loadLigAdvisorData();
+    const dashboard = document.getElementById('dashboard');
+    dashboard.innerHTML = '<h2>Simulation Data</h2>';
+    
+    molArray.forEach((mol, index) => {
+        const smiles = mol.toSmiles();
+        const mass = mol.getMolecularFormula().mass;
+        const info = data[smiles] || { name: 'Unknown', targets: ['None listed'] };
+
+        const div = document.createElement('div');
+        div.innerHTML = `<p><b>Compound ${index + 1}:</b> ${info.name}</p><ul><li>SMILES: <code>${smiles}</code></li><li>Mol. Weight: ${mass.toFixed(2)} g/mol</li><li>Predicted Targets: ${info.targets.join(', ')}</li></ul><hr>`;
+        dashboard.appendChild(div);
+    });
+    
+    const temperature = document.getElementById('temperature').value;
+    const solvent = document.getElementById('solvent').value;
+    const summary = document.createElement('div');
+    summary.innerHTML += `<b>Simulation Conditions:</b> Temp: ${temperature}K, Solvent: ${solvent}`;
+    dashboard.appendChild(summary);
+}
+
+function mergeMolecules() {
+    if (moleculesData.length < 2) return;
+    
+    let merged = moleculesData[0];
+    for(let i=1; i < moleculesData.length; i++) {
+        merged = merged.merge(moleculesData[i]);
+    }
+    
+    moleculesData = [minimizeMolecule(merged)];
+    
+    moleculeObjects.forEach(obj => scene.remove(obj));
+    moleculeObjects = [];
+    renderMolecule(moleculesData[0], 0);
+    
+    // Recenter camera
+    camera.position.set(0, 0, 40);
+    controls.target.set(0, 0, 0); 
+    
+    updateDashboard(moleculesData);
+    document.getElementById('merge').disabled = true;
+}
+
+function simulate() {
+    // This is where OCL is used, so it MUST be called after OCL loads.
+    moleculeObjects.forEach(obj => scene.remove(obj));
+    moleculeObjects = [];
+    moleculesData = [];
+
+    const input = document.getElementById('compoundInput').value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    
+    let offsetX = 0;
+    const offsetStep = 15;
+
+    input.forEach(smiles => {
+        try {
+            const mol = OCL.Molecule.fromSmiles(smiles);
+            const minimized = minimizeMolecule(mol);
+            moleculesData.push(minimized);
+            renderMolecule(minimized, offsetX);
+            offsetX += offsetStep;
+        } catch (e) {
+            console.error(`Error parsing or rendering SMILES: ${smiles}`, e);
+        }
+    });
+
+    if (moleculesData.length > 0) {
+        const totalWidth = offsetX - offsetStep;
+        camera.position.set(totalWidth / 2, 0, 40);
+        controls.target.set(totalWidth / 2, 0, 0);
+    } else {
+        camera.position.set(0, 0, 40);
+        controls.target.set(0, 0, 0);
+    }
+    controls.update();
+
+    updateDashboard(moleculesData);
+    document.getElementById('merge').disabled = moleculesData.length < 2;
+}
+
+// --- INITIALIZATION SEQUENCE (Fixed) ---
+
+// 1. Initialize Three.js/Viewer immediately
 window.addEventListener('load', () => {
-    // Wrap all logic within the OCL initialization promise
-    OCL.OCL().then(OCL => {
-
-        // Global variables scoped inside the OCL promise
-        let scene, camera, renderer, controls;
-        let moleculeObjects = [];
-        let moleculesData = [];
-
-        // --- 3D UTILITIES ---
+    initViewer();
+    
+    // 2. Initialize OCL and run simulate() *after* the promise resolves.
+    OCL.OCL().then(lib => {
+        OCL = lib; // Store the initialized OCL library globally
         
-        // Custom geometry for a bond (cylinder between two points)
-        function createBondCylinder(start, end, radius, color) {
-            const length = start.distanceTo(end);
-            const cylinder = new THREE.Mesh(
-                new THREE.CylinderGeometry(radius, radius, length, 8),
-                new THREE.MeshPhongMaterial({ color: color || 0x888888 })
-            );
+        // 3. RUN THE SIMULATION ON LOAD
+        simulate(); 
 
-            cylinder.position.set((start.x + end.x) / 2, (start.y + end.y) / 2, (start.z + end.z) / 2);
-            cylinder.lookAt(end);
-            cylinder.rotateX(Math.PI / 2); // Correct orientation
-
-            return cylinder;
-        }
-
-        // Atom color map (simplified CPK-style)
-        function getAtomColor(atomLabel) {
-            switch (atomLabel) {
-                case 'O': return 0xff0000; // Red (Oxygen)
-                case 'N': return 0x0000ff; // Blue (Nitrogen)
-                case 'F':
-                case 'Cl':
-                case 'Br':
-                case 'I': return 0x00ff00; // Green (Halogens)
-                case 'H': return 0xffffff; // White (Hydrogen)
-                default: return 0x333333; // Dark Gray (Carbon and others)
-            }
-        }
-
-        // --- VIEWER INITIALIZATION ---
-
-        function initViewer() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xf0f0f0);
-            camera = new THREE.PerspectiveCamera(75, 900 / 600, 0.1, 2000);
-            camera.position.set(0, 0, 40);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(900, 600);
-            document.getElementById('viewer').appendChild(renderer.domElement);
-
-            const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
-            light1.position.set(50, 50, 100);
-            scene.add(light1);
-
-            const light2 = new THREE.AmbientLight(0x606060);
-            scene.add(light2);
-
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; // smooth rotation
-            controls.dampingFactor = 0.05;
-            
-            animate();
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        // --- CHEMICAL LOGIC (OCL) ---
-        
-        // LigAdvisor-style static data
-        function loadLigAdvisorData() {
-            return {
-                "CCO": { "name": "Ethanol", "targets": ["ADH1A", "ADH1B"] },
-                "CC": { "name": "Ethane", "targets": [] },
-                "O=C=O": { "name": "Carbon dioxide", "targets": ["Carbonic Anhydrase"] },
-                "CCC(=O)O": { "name": "Propanoic Acid", "targets": ["GPR41"] }
-            };
-        }
-
-        // Energy minimization + 3D coordinates + centering
-        function minimizeMolecule(mol) {
-            try {
-                mol.addImplicitHydrogens();
-                // Ensure necessary helper arrays are calculated
-                mol.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
-                
-                // Generate initial 3D coordinates
-                OCL.Molecule3D.generate3DCoordinates(mol);
-                
-                // Optimize geometry using MMFF94 (Molecular Mechanics Force Field)
-                OCL.MMFF94.optimize(mol);
-
-                // Center molecule coordinates
-                let n = mol.getAllAtoms(), cx = 0, cy = 0, cz = 0;
-                for (let i = 0; i < n; i++) {
-                    cx += mol.getAtomX(i); cy += mol.getAtomY(i); cz += mol.getAtomZ(i);
-                }
-                cx /= n; cy /= n; cz /= n;
-                for (let i = 0; i < n; i++) {
-                    mol.setAtomX(i, mol.getAtomX(i) - cx);
-                    mol.setAtomY(i, mol.getAtomY(i) - cy);
-                    mol.setAtomZ(i, mol.getAtomZ(i) - cz);
-                }
-                return mol;
-            } catch (e) {
-                console.warn('Minimization failed. Using generated coordinates.', e);
-                // Fallback: only generate 3D coordinates if minimization fails
-                OCL.Molecule3D.generate3DCoordinates(mol);
-                return mol;
-            }
-        }
-
-        // Render molecule with atoms (spheres) and bonds (cylinders)
-        function renderMolecule(mol, offsetX = 0) {
-            const group = new THREE.Group();
-            const atomRadius = 0.7;
-            const bondRadius = 0.2;
-
-            // 1. Render Atoms
-            for (let i = 0; i < mol.getAllAtoms(); i++) {
-                const atomLabel = mol.getAtomLabel(i);
-                const color = getAtomColor(atomLabel);
-                
-                const sphere = new THREE.Mesh(
-                    new THREE.SphereGeometry(atomRadius, 32, 32),
-                    new THREE.MeshPhongMaterial({ color: color })
-                );
-                // Add the offset to the X position
-                sphere.position.set(mol.getAtomX(i) + offsetX, mol.getAtomY(i), mol.getAtomZ(i));
-                group.add(sphere);
-            }
-
-            // 2. Render Bonds (Fixed Logic)
-            for (let b = 0; b < mol.getAllBonds(); b++) {
-                // Correct way to get atom indices connected by a bond in OCL
-                const atomIdx1 = mol.getBondAtom(b, 0); 
-                const atomIdx2 = mol.getBondAtom(b, 1);
-                
-                // Atom positions
-                const p1 = new THREE.Vector3(mol.getAtomX(atomIdx1) + offsetX, mol.getAtomY(atomIdx1), mol.getAtomZ(atomIdx1));
-                const p2 = new THREE.Vector3(mol.getAtomX(atomIdx2) + offsetX, mol.getAtomY(atomIdx2), mol.getAtomZ(atomIdx2));
-
-                // Add cylinder for the bond
-                const cylinder = createBondCylinder(p1, p2, bondRadius, 0xaaaaaa);
-                group.add(cylinder);
-
-                // Note: More complex logic needed for double/triple bonds, but this covers single bonds.
-            }
-            
-            scene.add(group);
-            moleculeObjects.push(group);
-        }
-
-        // --- DASHBOARD AND CONTROL LOGIC ---
-
-        // Update dashboard
-        function updateDashboard(molArray) {
-            const data = loadLigAdvisorData();
-            const dashboard = document.getElementById('dashboard');
-            dashboard.innerHTML = '<h2>Simulation Data</h2>';
-            
-            molArray.forEach((mol, index) => {
-                const smiles = mol.toSmiles();
-                // Normalize SMILES to match the data structure (optional, but good practice)
-                const normalizedSmiles = new OCL.Molecule(mol).toSmiles(); 
-                const info = data[normalizedSmiles] || { name: 'Unknown', targets: ['None listed'] };
-                const mass = mol.getMolecularFormula().mass;
-
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <p><b>Compound ${index + 1}:</b> ${info.name}</p>
-                    <ul>
-                        <li>SMILES: <code>${smiles}</code></li>
-                        <li>Mol. Weight: ${mass.toFixed(2)} g/mol</li>
-                        <li>Predicted Targets: ${info.targets.join(', ')}</li>
-                    </ul>
-                    <hr>
-                `;
-                dashboard.appendChild(div);
-            });
-            
-            const temperature = document.getElementById('temperature').value;
-            const solvent = document.getElementById('solvent').value;
-            const summary = document.createElement('div');
-            summary.innerHTML += `<b>Simulation Conditions:</b> Temp: ${temperature}K, Solvent: ${solvent}`;
-            dashboard.appendChild(summary);
-        }
-
-        // Merge molecules
-        function mergeMolecules() {
-            if (moleculesData.length < 2) return;
-            
-            // Merge all molecules into the first one
-            let merged = moleculesData[0];
-            for(let i=1; i < moleculesData.length; i++) {
-                merged = merged.merge(moleculesData[i]);
-            }
-            
-            moleculesData = [minimizeMolecule(merged)];
-            
-            // Clean up old objects and render the new one
-            moleculeObjects.forEach(obj => scene.remove(obj));
-            moleculeObjects = [];
-            renderMolecule(moleculesData[0], 0);
-            
-            // Adjust camera to focus on the merged structure
-            camera.position.set(0, 0, 40);
-            controls.target.set(0, 0, 0); 
-            
-            updateDashboard(moleculesData);
-            document.getElementById('merge').disabled = true;
-        }
-
-        // Simulate
-        function simulate() {
-            // Reset scene
-            moleculeObjects.forEach(obj => scene.remove(obj));
-            moleculeObjects = [];
-            moleculesData = [];
-
-            const input = document.getElementById('compoundInput').value.split(',').map(s => s.trim()).filter(s => s.length > 0);
-            
-            let offsetX = 0;
-            const offsetStep = 15; // Separation distance between molecules
-
-            input.forEach(smiles => {
-                try {
-                    const mol = OCL.Molecule.fromSmiles(smiles);
-                    const minimized = minimizeMolecule(mol);
-                    moleculesData.push(minimized);
-                    renderMolecule(minimized, offsetX);
-                    offsetX += offsetStep;
-                } catch (e) {
-                    console.error(`Error parsing or rendering SMILES: ${smiles}`, e);
-                    alert(`Could not process SMILES: ${smiles}`);
-                }
-            });
-
-            // Adjust camera position based on the number of molecules
-            if (moleculesData.length > 0) {
-                const totalWidth = offsetX - offsetStep;
-                camera.position.set(totalWidth / 2, 0, 40);
-                controls.target.set(totalWidth / 2, 0, 0);
-            } else {
-                camera.position.set(0, 0, 40);
-                controls.target.set(0, 0, 0);
-            }
-            controls.update();
-
-            updateDashboard(moleculesData);
-            document.getElementById('merge').disabled = moleculesData.length < 2;
-        }
-
-        // --- EVENT LISTENERS ---
+        // 4. Attach event listeners *after* OCL is ready
         document.getElementById('simulate').addEventListener('click', simulate);
         document.getElementById('merge').addEventListener('click', mergeMolecules);
 
-        // --- INIT ---
-        initViewer();
-        simulate(); // Run simulation on load with default SMILES
-
     }).catch(error => {
-        // Handle OCL loading error
-        document.getElementById('dashboard').innerHTML = `
-            <h2>Error</h2>
-            <p>Failed to initialize OpenChemLib. 3D rendering will not work. Check the console for details.</p>
-        `;
+        document.getElementById('viewer').innerHTML = '<h2>Initialization Error</h2><p>Failed to load OpenChemLib. See console for details.</p>';
         console.error("OpenChemLib initialization failed:", error);
     });
 });
