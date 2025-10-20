@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>LigChem3D: Research-Ready Molecular Simulator</title>
+<title>LigChem3D Browser Simulator</title>
 <style>
 body { font-family: Arial, sans-serif; margin: 20px; }
 h1 { margin-bottom: 10px; }
@@ -10,14 +10,14 @@ h1 { margin-bottom: 10px; }
 #compoundInput { width: 400px; height: 50px; }
 #viewer { width: 900px; height: 600px; border:1px solid black; margin-top: 10px; }
 #dashboard { margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px; max-height:300px; overflow:auto; }
-button { margin-right: 10px; }
+button { margin-right: 10px; margin-top: 5px; }
 </style>
 </head>
 <body>
-<h1>LigChem3D: Research-Ready Molecular Simulator</h1>
+<h1>LigChem3D: Browser-Based Molecular Simulator</h1>
 
 <div id="controls">
-<textarea id="compoundInput" placeholder="Enter SMILES, separated by commas">CCO,CC,O=C=O</textarea><br>
+<textarea id="compoundInput" placeholder="Enter SMILES separated by commas">CCO,CC,O=C=O</textarea><br>
 <button id="simulate">Visualize & Minimize</button>
 <button id="merge">Merge Compounds</button>
 <label>Temperature (K): <input type="number" id="temperature" value="300"></label>
@@ -33,19 +33,19 @@ button { margin-right: 10px; }
 <div id="viewer"></div>
 <div id="dashboard"></div>
 
-<!-- Include Three.js and OrbitControls -->
+<!-- Three.js + OrbitControls -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
-<!-- Include OpenChemLib.js -->
+<!-- OpenChemLib.js -->
 <script src="https://unpkg.com/openchemlib/openchemlib-full.js"></script>
 
 <script>
-// --- Global Variables ---
+// Global variables
 let scene, camera, renderer, controls;
 let moleculeObjects = [];
 let moleculesData = [];
 
-// --- Initialize Viewer ---
+// Initialize 3D viewer
 function initViewer() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, 900/600, 0.1, 2000);
@@ -63,7 +63,6 @@ function initViewer() {
     scene.add(light2);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
-
     animate();
 }
 
@@ -73,7 +72,7 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// --- LigAdvisor-Style Data ---
+// LigAdvisor-style static data
 function loadLigAdvisorData() {
     return {
         "CCO": { "name": "Ethanol", "targets": ["ADH1A","ADH1B"] },
@@ -82,7 +81,7 @@ function loadLigAdvisorData() {
     };
 }
 
-// --- Energy Minimization + 3D Generation ---
+// Energy minimization + 3D coordinates + centering
 function minimizeMolecule(mol) {
     try {
         mol.addImplicitHydrogens();
@@ -90,11 +89,11 @@ function minimizeMolecule(mol) {
         OCL.Molecule3D.generate3DCoordinates(mol);
         OCL.MMFF94.optimize(mol);
 
-        // Center molecule at origin
-        let cx=0,cy=0,cz=0,n=mol.getAllAtoms();
+        // Center molecule
+        let n = mol.getAllAtoms(), cx=0,cy=0,cz=0;
         for(let i=0;i<n;i++){ cx+=mol.getAtomX(i); cy+=mol.getAtomY(i); cz+=mol.getAtomZ(i);}
         cx/=n; cy/=n; cz/=n;
-        for(let i=0;i<n;i++){ 
+        for(let i=0;i<n;i++){
             mol.setAtomX(i,mol.getAtomX(i)-cx);
             mol.setAtomY(i,mol.getAtomY(i)-cy);
             mol.setAtomZ(i,mol.getAtomZ(i)-cz);
@@ -106,23 +105,19 @@ function minimizeMolecule(mol) {
     }
 }
 
-// --- Render Molecule ---
+// Render molecule with atoms and bonds
 function renderMolecule(mol, offsetX=0) {
     const group = new THREE.Group();
-
-    // Atoms
     for(let i=0;i<mol.getAllAtoms();i++){
         const atom = mol.getAtomLabel(i);
         const color = atom==='O'?0xff0000: atom==='C'?0x000000:0x00ff00;
         const sphere = new THREE.Mesh(
             new THREE.SphereGeometry(0.6,16,16),
-            new THREE.MeshPhongMaterial({color:color})
+            new THREE.MeshPhongMaterial({color})
         );
         sphere.position.set(mol.getAtomX(i)+offsetX, mol.getAtomY(i), mol.getAtomZ(i));
         group.add(sphere);
     }
-
-    // Bonds
     for(let b=0;b<mol.getAllBonds();b++){
         const from = mol.getBondAtom(0,b);
         const to = mol.getBondAtom(1,b);
@@ -135,23 +130,11 @@ function renderMolecule(mol, offsetX=0) {
         const line = new THREE.Line(geometry,new THREE.LineBasicMaterial({color:0x888888}));
         group.add(line);
     }
-
     scene.add(group);
     moleculeObjects.push(group);
 }
 
-// --- Merge Molecules ---
-function mergeMolecules() {
-    if(moleculesData.length<2) return;
-    const merged = moleculesData.reduce((a,b)=>a.merge(b));
-    moleculesData = [minimizeMolecule(merged)];
-    moleculeObjects.forEach(obj=>scene.remove(obj));
-    moleculeObjects = [];
-    renderMolecule(moleculesData[0],0);
-    updateDashboard(moleculesData);
-}
-
-// --- Update Dashboard ---
+// Update dashboard
 function updateDashboard(molArray) {
     const data = loadLigAdvisorData();
     const dashboard = document.getElementById('dashboard');
@@ -160,10 +143,9 @@ function updateDashboard(molArray) {
         const smiles = mol.toSmiles();
         const info = data[smiles]||{name:'Unknown',targets:[]};
         const div = document.createElement('div');
-        div.innerHTML = `<b>${smiles}:</b> ${info.name}, Targets: ${info.targets.join(', ')}`;
+        div.innerHTML = `<b>${smiles}</b>: ${info.name}, Targets: ${info.targets.join(', ')}`;
         dashboard.appendChild(div);
     });
-
     const temperature = document.getElementById('temperature').value;
     const solvent = document.getElementById('solvent').value;
     const summary = document.createElement('div');
@@ -171,32 +153,43 @@ function updateDashboard(molArray) {
     dashboard.appendChild(summary);
 }
 
-// --- Simulate ---
+// Merge molecules
+function mergeMolecules() {
+    if(moleculesData.length<2) return;
+    let merged = moleculesData.reduce((a,b)=>a.merge(b));
+    moleculesData = [minimizeMolecule(merged)];
+    moleculeObjects.forEach(obj=>scene.remove(obj));
+    moleculeObjects=[];
+    renderMolecule(moleculesData[0],0);
+    updateDashboard(moleculesData);
+}
+
+// Simulate
 function simulate() {
     moleculeObjects.forEach(obj=>scene.remove(obj));
-    moleculeObjects = [];
-    moleculesData = [];
+    moleculeObjects=[];
+    moleculesData=[];
 
     const input = document.getElementById('compoundInput').value.split(',').map(s=>s.trim());
-    let offsetX = 0;
+    let offsetX=0;
     input.forEach(smiles=>{
         const mol = OCL.Molecule.fromSmiles(smiles);
         const minimized = minimizeMolecule(mol);
         moleculesData.push(minimized);
         renderMolecule(minimized, offsetX);
-        offsetX += 15;
+        offsetX+=15;
     });
-
     updateDashboard(moleculesData);
 }
 
-// --- Event Listeners ---
+// Event listeners
 document.getElementById('simulate').addEventListener('click',simulate);
 document.getElementById('merge').addEventListener('click',mergeMolecules);
 
-// --- Initialize ---
+// Init
 initViewer();
 </script>
 </body>
 </html>
+
 
