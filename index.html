@@ -33,43 +33,47 @@ button { margin-right: 10px; }
 <div id="viewer"></div>
 <div id="dashboard"></div>
 
-<!-- Include Three.js -->
+<!-- Include Three.js and OrbitControls -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
 <!-- Include OpenChemLib.js -->
 <script src="https://unpkg.com/openchemlib/openchemlib-full.js"></script>
 
 <script>
 // --- Global Variables ---
-let scene, camera, renderer;
+let scene, camera, renderer, controls;
 let moleculeObjects = [];
 let moleculesData = [];
 
-// --- Initialize 3D Viewer ---
+// --- Initialize Viewer ---
 function initViewer() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, 900/600, 0.1, 2000);
-    camera.position.z = 60;
+    camera.position.set(0, 0, 60);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(900, 600);
     document.getElementById('viewer').appendChild(renderer.domElement);
 
     const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
-    light1.position.set(0,0,100).normalize();
+    light1.position.set(0, 0, 100);
     scene.add(light1);
 
     const light2 = new THREE.AmbientLight(0x404040);
     scene.add(light2);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
 
     animate();
 }
 
 function animate() {
     requestAnimationFrame(animate);
+    controls.update();
     renderer.render(scene, camera);
 }
 
-// --- LigAdvisor-Style Data (Static) ---
+// --- LigAdvisor-Style Data ---
 function loadLigAdvisorData() {
     return {
         "CCO": { "name": "Ethanol", "targets": ["ADH1A","ADH1B"] },
@@ -78,11 +82,33 @@ function loadLigAdvisorData() {
     };
 }
 
-// --- Render Molecule with Bonds ---
+// --- Energy Minimization + 3D Generation ---
+function minimizeMolecule(mol) {
+    try {
+        mol.addImplicitHydrogens();
+        mol.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
+        OCL.Molecule3D.generate3DCoordinates(mol);
+        OCL.MMFF94.optimize(mol);
+
+        // Center molecule at origin
+        let cx=0,cy=0,cz=0,n=mol.getAllAtoms();
+        for(let i=0;i<n;i++){ cx+=mol.getAtomX(i); cy+=mol.getAtomY(i); cz+=mol.getAtomZ(i);}
+        cx/=n; cy/=n; cz/=n;
+        for(let i=0;i<n;i++){ 
+            mol.setAtomX(i,mol.getAtomX(i)-cx);
+            mol.setAtomY(i,mol.getAtomY(i)-cy);
+            mol.setAtomZ(i,mol.getAtomZ(i)-cz);
+        }
+        return mol;
+    } catch(e){
+        console.warn('Minimization failed', e);
+        return mol;
+    }
+}
+
+// --- Render Molecule ---
 function renderMolecule(mol, offsetX=0) {
     const group = new THREE.Group();
-    mol.addImplicitHydrogens();
-    mol.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
 
     // Atoms
     for(let i=0;i<mol.getAllAtoms();i++){
@@ -102,7 +128,10 @@ function renderMolecule(mol, offsetX=0) {
         const to = mol.getBondAtom(1,b);
         const x1 = mol.getAtomX(from)+offsetX, y1 = mol.getAtomY(from), z1 = mol.getAtomZ(from);
         const x2 = mol.getAtomX(to)+offsetX, y2 = mol.getAtomY(to), z2 = mol.getAtomZ(to);
-        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1,y1,z1), new THREE.Vector3(x2,y2,z2)]);
+        const geometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(x1,y1,z1),
+            new THREE.Vector3(x2,y2,z2)
+        ]);
         const line = new THREE.Line(geometry,new THREE.LineBasicMaterial({color:0x888888}));
         group.add(line);
     }
@@ -111,31 +140,15 @@ function renderMolecule(mol, offsetX=0) {
     moleculeObjects.push(group);
 }
 
-// --- Energy Minimization (MMFF94) ---
-function minimizeMolecule(mol) {
-    try {
-        const mol3D = mol.getCompactCopy();
-        mol3D.addImplicitHydrogens();
-        mol3D.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
-        OCL.Molecule3D.generate3DCoordinates(mol3D);
-        OCL.MMFF94.optimize(mol3D);
-        return mol3D;
-    } catch(e){
-        console.warn('Minimization failed', e);
-        return mol;
-    }
-}
-
 // --- Merge Molecules ---
 function mergeMolecules() {
     if(moleculesData.length<2) return;
     const merged = moleculesData.reduce((a,b)=>a.merge(b));
-    moleculesData = [merged];
+    moleculesData = [minimizeMolecule(merged)];
     moleculeObjects.forEach(obj=>scene.remove(obj));
     moleculeObjects = [];
-    const minimized = minimizeMolecule(merged);
-    renderMolecule(minimized,0);
-    updateDashboard([minimized]);
+    renderMolecule(moleculesData[0],0);
+    updateDashboard(moleculesData);
 }
 
 // --- Update Dashboard ---
@@ -158,7 +171,7 @@ function updateDashboard(molArray) {
     dashboard.appendChild(summary);
 }
 
-// --- Visualize & Minimize ---
+// --- Simulate ---
 function simulate() {
     moleculeObjects.forEach(obj=>scene.remove(obj));
     moleculeObjects = [];
