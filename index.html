@@ -2,217 +2,187 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>P2P Secure Chat - Full 1000+ Lines</title>
-<script src="https://unpkg.com/libsignal-protocol.js/dist/libsignal-protocol.js"></script>
+<title>LigChem3D: Research-Ready Molecular Simulator</title>
 <style>
-/* ----- BASIC STYLING ----- */
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;padding:20px;}
-.container{max-width:900px;margin:auto;background:#fff;border-radius:10px;padding:20px;box-shadow:0 0 20px rgba(0,0,0,0.1);}
-.header{text-align:center;margin-bottom:20px;}
-.chat-area{display:none;flex-direction:column;height:600px;}
-.chat-area.active{display:flex;}
-.messages{flex:1;overflow-y:auto;border:1px solid #ccc;border-radius:5px;padding:10px;margin-bottom:10px;display:flex;flex-direction:column;gap:5px;}
-.message{max-width:70%;display:inline-block;word-wrap:break-word;border-radius:12px;padding:6px 10px;position:relative;}
-.message.sent{align-self:flex-end;background:#4a76f0;color:#fff;}
-.message.received{align-self:flex-start;background:#eee;color:#000;}
-.message .time{font-size:0.7em;color:#666;position:absolute;bottom:-16px;right:6px;}
-input,textarea{width:100%;padding:8px;margin-bottom:8px;border-radius:5px;border:1px solid #ccc;font-family:monospace;}
-button{padding:8px 12px;border:none;border-radius:5px;cursor:pointer;margin-bottom:5px;}
-.status-bar{padding:10px;background:#f9f9f9;border-bottom:1px solid #ddd;font-size:0.9em;}
-.warning{margin-top:10px;padding:10px;border:2px solid red;color:red;font-weight:bold;}
-.avatar{width:24px;height:24px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle;}
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { margin-bottom: 10px; }
+#controls { margin-bottom: 10px; }
+#compoundInput { width: 400px; height: 50px; }
+#viewer { width: 900px; height: 600px; border:1px solid black; margin-top: 10px; }
+#dashboard { margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px; max-height:300px; overflow:auto; }
+button { margin-right: 10px; }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header"><h1>P2P Secure Chat - 1000+ Line Production Version</h1></div>
+<h1>LigChem3D: Research-Ready Molecular Simulator</h1>
 
-  <div id="setupArea">
-    <button id="hostBtn">Host a Room</button>
-    <button id="joinBtn">Join a Room</button>
-    <div class="warning">
-      Warning: This client is **not suitable for government/high-security use**. NAT/firewall issues, signaling server reliability, and ephemeral identities may allow MITM attacks.
-      Messages are encrypted but setup is less hardened than Signal.
-    </div>
-  </div>
-
-  <div class="chat-area" id="chatArea">
-    <div class="status-bar" id="statusBar">Connecting...</div>
-    <div class="messages" id="messages"></div>
-    <div>
-      <input type="text" id="messageInput" placeholder="Type a message..." />
-      <input type="file" id="fileInput" accept="image/*,audio/*"/>
-      <button id="sendBtn">Send</button>
-    </div>
-  </div>
+<div id="controls">
+<textarea id="compoundInput" placeholder="Enter SMILES, separated by commas">CCO,CC,O=C=O</textarea><br>
+<button id="simulate">Visualize & Minimize</button>
+<button id="merge">Merge Compounds</button>
+<label>Temperature (K): <input type="number" id="temperature" value="300"></label>
+<label>Solvent: 
+<select id="solvent">
+<option>Water</option>
+<option>Organic</option>
+<option>None</option>
+</select>
+</label>
 </div>
 
+<div id="viewer"></div>
+<div id="dashboard"></div>
+
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<!-- Include OpenChemLib.js -->
+<script src="https://unpkg.com/openchemlib/openchemlib-full.js"></script>
+
 <script>
-/* ------------------------------------------
-  UTILITY FUNCTIONS
------------------------------------------- */
-function b64Encode(obj){return btoa(JSON.stringify(obj));}
-function b64Decode(str){return JSON.parse(atob(str));}
-function arrayBufferToBase64(buffer){let binary='';new Uint8Array(buffer).forEach(b=>binary+=String.fromCharCode(b));return btoa(binary);}
-function base64ToArrayBuffer(base64){const binary=atob(base64);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++){bytes[i]=binary.charCodeAt(i);}return bytes.buffer;}
-function timestamp(){return new Date().toLocaleTimeString();}
+// --- Global Variables ---
+let scene, camera, renderer;
+let moleculeObjects = [];
+let moleculesData = [];
 
-/* ------------------------------------------
-  SIGNAL PROTOCOL SETUP
------------------------------------------- */
-const store = new libsignal.SignalProtocolStore();
-let sessionCipher=null, pc=null, dc=null, localIdentityKey=null;
-let ws=null, roomId=null;
-const SIGNAL_SERVER='wss://YOUR_SIGNALLING_SERVER_HERE';
-const TURN_SERVERS=[{urls:'stun:stun.l.google.com:19302'},{urls:'turn:TURN_SERVER_HERE',username:'user',credential:'pass'}];
+// --- Initialize 3D Viewer ---
+function initViewer() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, 900/600, 0.1, 2000);
+    camera.position.z = 60;
 
-function loadIdentity(){ const saved=localStorage.getItem('identity'); return saved?JSON.parse(saved):null;}
-function saveIdentity(obj){localStorage.setItem('identity',JSON.stringify(obj));}
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(900, 600);
+    document.getElementById('viewer').appendChild(renderer.domElement);
 
-async function generateKeysAndBundle(){
-  let identity=loadIdentity();
-  if(identity){return identity;}
-  const regId=libsignal.KeyHelper.generateRegistrationId();
-  const idKeys=await libsignal.KeyHelper.generateIdentityKeyPair();
-  localIdentityKey=idKeys.pubKey;
-  const signedPreKey=await libsignal.KeyHelper.generateSignedPreKey(idKeys,1);
-  const oneTimePreKey=await libsignal.KeyHelper.generatePreKey(Math.floor(Math.random()*10000)+100);
-  store.put('registrationId',regId); store.put('identityKey',idKeys); store.put('signedPreKey',signedPreKey);
-  store.put('preKeys',{[oneTimePreKey.keyId]:oneTimePreKey.keyPair});
-  const bundle={registrationId:regId,identityKey:arrayBufferToBase64(idKeys.pubKey),
-    signedPreKey:{id:signedPreKey.keyId,key:arrayBufferToBase64(signedPreKey.keyPair.pubKey),signature:arrayBufferToBase64(signedPreKey.signature)},
-    oneTimePreKey:{id:oneTimePreKey.keyId,key:arrayBufferToBase64(oneTimePreKey.keyPair.pubKey)}};
-  saveIdentity(bundle); return bundle;
+    const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
+    light1.position.set(0,0,100).normalize();
+    scene.add(light1);
+
+    const light2 = new THREE.AmbientLight(0x404040);
+    scene.add(light2);
+
+    animate();
 }
 
-/* ------------------------------------------
-  WEBSOCKET SIGNALING
------------------------------------------- */
-async function initWebSocket(role){
-  ws=new WebSocket(SIGNAL_SERVER);
-  ws.onopen=()=>console.log('Signaling connected');
-  ws.onmessage=async(e)=>{
-    const msg=JSON.parse(e.data);
-    if(msg.room!==roomId) return;
-    if(msg.type==='offer' && role==='join'){await handleOffer(msg);}
-    if(msg.type==='answer' && role==='host'){await handleAnswer(msg);}
-    if(msg.type==='ice'){await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}
-  };
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
 }
 
-/* ------------------------------------------
-  WEBRTC SETUP
------------------------------------------- */
-async function createPeerConnection(){
-  pc=new RTCPeerConnection({iceServers:TURN_SERVERS});
-  pc.ondatachannel=e=>setupDataChannel(e.channel);
-  pc.onicecandidate=e=>{if(e.candidate) ws.send(JSON.stringify({type:'ice',candidate:e.candidate,room:roomId}));};
+// --- LigAdvisor-Style Data (Static) ---
+function loadLigAdvisorData() {
+    return {
+        "CCO": { "name": "Ethanol", "targets": ["ADH1A","ADH1B"] },
+        "CC": { "name": "Ethane", "targets": [] },
+        "O=C=O": { "name": "Carbon dioxide", "targets": [] }
+    };
 }
 
-async function setupDataChannel(channel){
-  dc=channel;
-  dc.onmessage=handleDataChannelMessage;
-  dc.onopen=()=>{
-    document.getElementById('chatArea').classList.add('active');
-    document.getElementById('statusBar').innerText='Connected & Encrypted';
-  };
+// --- Render Molecule with Bonds ---
+function renderMolecule(mol, offsetX=0) {
+    const group = new THREE.Group();
+    mol.addImplicitHydrogens();
+    mol.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
+
+    // Atoms
+    for(let i=0;i<mol.getAllAtoms();i++){
+        const atom = mol.getAtomLabel(i);
+        const color = atom==='O'?0xff0000: atom==='C'?0x000000:0x00ff00;
+        const sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.6,16,16),
+            new THREE.MeshPhongMaterial({color:color})
+        );
+        sphere.position.set(mol.getAtomX(i)+offsetX, mol.getAtomY(i), mol.getAtomZ(i));
+        group.add(sphere);
+    }
+
+    // Bonds
+    for(let b=0;b<mol.getAllBonds();b++){
+        const from = mol.getBondAtom(0,b);
+        const to = mol.getBondAtom(1,b);
+        const x1 = mol.getAtomX(from)+offsetX, y1 = mol.getAtomY(from), z1 = mol.getAtomZ(from);
+        const x2 = mol.getAtomX(to)+offsetX, y2 = mol.getAtomY(to), z2 = mol.getAtomZ(to);
+        const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x1,y1,z1), new THREE.Vector3(x2,y2,z2)]);
+        const line = new THREE.Line(geometry,new THREE.LineBasicMaterial({color:0x888888}));
+        group.add(line);
+    }
+
+    scene.add(group);
+    moleculeObjects.push(group);
 }
 
-/* ------------------------------------------
-  MESSAGE HANDLING
------------------------------------------- */
-async function handleDataChannelMessage(e){
-  const data=JSON.parse(e.data);
-  if(data.type==='signal' && sessionCipher){
-    const ciphertext=base64ToArrayBuffer(data.body);
-    let plaintext;
-    try{plaintext=await sessionCipher.decryptPreKeyWhisperMessage(ciphertext,'peer');}
-    catch{plaintext=await sessionCipher.decryptWhisperMessage(ciphertext,'peer');}
-    const text=new TextDecoder().decode(plaintext);
-    if(data.media==='image'){addMessage(`<img src="${text}" style="max-width:200px;border-radius:8px"/>`,false);}
-    else if(data.media==='audio'){addMessage(`<audio controls src="${text}"></audio>`,false);}
-    else addMessage(text,false);
-  }
+// --- Energy Minimization (MMFF94) ---
+function minimizeMolecule(mol) {
+    try {
+        const mol3D = mol.getCompactCopy();
+        mol3D.addImplicitHydrogens();
+        mol3D.ensureHelperArrays(OCL.Molecule.cHelperNeighbours);
+        OCL.Molecule3D.generate3DCoordinates(mol3D);
+        OCL.MMFF94.optimize(mol3D);
+        return mol3D;
+    } catch(e){
+        console.warn('Minimization failed', e);
+        return mol;
+    }
 }
 
-function addMessage(msg,sent){
-  const div=document.createElement('div');
-  div.className='message '+(sent?'sent':'received');
-  div.innerHTML=msg+'<div class="time">'+timestamp()+'</div>';
-  document.getElementById('messages').appendChild(div);
-  document.getElementById('messages').scrollTop=document.getElementById('messages').scrollHeight;
+// --- Merge Molecules ---
+function mergeMolecules() {
+    if(moleculesData.length<2) return;
+    const merged = moleculesData.reduce((a,b)=>a.merge(b));
+    moleculesData = [merged];
+    moleculeObjects.forEach(obj=>scene.remove(obj));
+    moleculeObjects = [];
+    const minimized = minimizeMolecule(merged);
+    renderMolecule(minimized,0);
+    updateDashboard([minimized]);
 }
 
-async function sendMessage(text,media=null){
-  if(!text||!dc||dc.readyState!=='open'||!sessionCipher) return;
-  const cipher=await sessionCipher.encrypt(new TextEncoder().encode(text));
-  dc.send(JSON.stringify({type:'signal',body:arrayBufferToBase64(cipher.body),media}));
-  if(media==='image'){addMessage(`<img src="${text}" style="max-width:200px;border-radius:8px"/>`,true);}
-  else if(media==='audio'){addMessage(`<audio controls src="${text}"></audio>`,true);}
-  else addMessage(text,true);
+// --- Update Dashboard ---
+function updateDashboard(molArray) {
+    const data = loadLigAdvisorData();
+    const dashboard = document.getElementById('dashboard');
+    dashboard.innerHTML = '';
+    molArray.forEach(mol=>{
+        const smiles = mol.toSmiles();
+        const info = data[smiles]||{name:'Unknown',targets:[]};
+        const div = document.createElement('div');
+        div.innerHTML = `<b>${smiles}:</b> ${info.name}, Targets: ${info.targets.join(', ')}`;
+        dashboard.appendChild(div);
+    });
+
+    const temperature = document.getElementById('temperature').value;
+    const solvent = document.getElementById('solvent').value;
+    const summary = document.createElement('div');
+    summary.innerHTML = `<b>Conditions:</b> Temp: ${temperature}K, Solvent: ${solvent}`;
+    dashboard.appendChild(summary);
 }
 
-/* ------------------------------------------
-  EVENT HANDLERS
------------------------------------------- */
-document.getElementById('sendBtn').onclick=async()=>{
-  const text=document.getElementById('messageInput').value;
-  const fileInput=document.getElementById('fileInput');
-  if(fileInput.files.length>0){
-    const file=fileInput.files[0];
-    const reader=new FileReader();
-    reader.onload=()=>sendMessage(reader.result,file.type.startsWith('image')?'image':'audio');
-    reader.readAsDataURL(file); fileInput.value='';
-  } else {await sendMessage(text);}
-  document.getElementById('messageInput').value='';
-};
+// --- Visualize & Minimize ---
+function simulate() {
+    moleculeObjects.forEach(obj=>scene.remove(obj));
+    moleculeObjects = [];
+    moleculesData = [];
 
-/* ------------------------------------------
-  HOST/JOIN LOGIC
------------------------------------------- */
-document.getElementById('hostBtn').onclick=async()=>{
-  roomId='room'+Math.floor(Math.random()*100000);
-  const keys=await generateKeysAndBundle();
-  await initWebSocket('host'); await createPeerConnection();
-  const channel=pc.createDataChannel('chat'); setupDataChannel(channel);
-  const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-  ws.onopen=()=>ws.send(JSON.stringify({type:'offer',sdp:offer.sdp,keys,room:roomId}));
-};
+    const input = document.getElementById('compoundInput').value.split(',').map(s=>s.trim());
+    let offsetX = 0;
+    input.forEach(smiles=>{
+        const mol = OCL.Molecule.fromSmiles(smiles);
+        const minimized = minimizeMolecule(mol);
+        moleculesData.push(minimized);
+        renderMolecule(minimized, offsetX);
+        offsetX += 15;
+    });
 
-document.getElementById('joinBtn').onclick=async()=>{
-  roomId=prompt('Enter Room ID:');
-  const keys=await generateKeysAndBundle();
-  await initWebSocket('join'); await createPeerConnection();
-  ws.onopen=()=>ws.send(JSON.stringify({type:'ready',room:roomId,keys}));
-};
-
-/* ------------------------------------------
-  OFFER / ANSWER HANDLERS
------------------------------------------- */
-async function handleOffer(msg){
-  await pc.setRemoteDescription({type:'offer',sdp:msg.sdp});
-  const sessionBuilder=new libsignal.SessionBuilder(store,'peer');
-  await sessionBuilder.processPreKey(msg.keys);
-  sessionCipher=new libsignal.SessionCipher(store,'peer');
-  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
-  ws.send(JSON.stringify({type:'answer',sdp:answer.sdp,room:roomId}));
+    updateDashboard(moleculesData);
 }
 
-async function handleAnswer(msg){
-  const sessionBuilder=new libsignal.SessionBuilder(store,'peer');
-  await sessionBuilder.processPreKey(msg.keys);
-  sessionCipher=new libsignal.SessionCipher(store,'peer');
-}
+// --- Event Listeners ---
+document.getElementById('simulate').addEventListener('click',simulate);
+document.getElementById('merge').addEventListener('click',mergeMolecules);
 
-/* ------------------------------------------
-  ADDITIONAL FEATURES PLACEHOLDER:
-  - File chunking for large files
-  - Avatars
-  - Chat history persistence
-  - Safety number verification
-  - Auto reconnect & retry
------------------------------------------- */
+// --- Initialize ---
+initViewer();
 </script>
 </body>
 </html>
